@@ -1,0 +1,1258 @@
+:root {
+  /* 메인 컬러 테마: Blush Pink & Burgundy */
+  --blush-pink: rgb(244, 194, 194);      /* #F4C2C2 */
+  --blush-pink-light: #FDF0F0;
+  --blush-pink-soft: #FAE1E1;
+  --burgundy: rgb(128, 0, 32);           /* #800020 */
+  --burgundy-dark: #5C0016;
+
+  /* 생리 주기 상태별 서브 컬러 */
+  --period-bg: #FFE0E5;
+  --period-border: #800020;
+  --period-text: #800020;
+
+  --fertile-bg: #F3E8FF;
+  --fertile-border: #7E22CE;
+  --fertile-text: #6B21A8;
+
+  --ovulation-bg: #FCE7F3;
+  --ovulation-border: #BE185D;
+  --ovulation-text: #9D174D;
+
+  --pms-bg: #FEF3C7;
+  --pms-border: #B45309;
+  --pms-text: #92400E;
+
+  /* 배경 및 텍스트 컬러 */
+  --bg-page: #FFF9FA;
+  --bg-card: #FFFFFF;
+  --text-main: #2E151B;
+  --text-muted: #7D5A62;
+  --border-color: #F2D6D8;
+
+  /* 시간표 설정 (모바일 기준 44px, PC에서 확장) */
+  --hour-height: 44px;
+  --radius-lg: 18px;
+  --radius-md: 12px;
+  --shadow-soft: 0 6px 20px rgba(128, 0, 32, 0.06);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: var(--bg-page);
+  color: var(--text-main);
+  line-height: 1.45;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: calc(40px + env(safe-area-inset-bottom));
+  overflow-x: hidden;
+}
+
+.container {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 14px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ==========================================
+   좌측 슬라이드 네비게이션 드로어 (햄버거 메뉴)
+========================================== */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(46, 21, 27, 0.45);
+  backdrop-filter: blur(2px);
+  z-index: 90;
+}
+
+.nav-drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 280px;
+  max-width: 82vw;
+  background: #FFFFFF;
+  border-right: 2px solid var(--blush-pink);
+  box-shadow: 8px 0 28px rgba(128, 0, 32, 0.14);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  padding: calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom));
+  transform: translateX(-105%);
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.nav-drawer.open {
+  transform: translateX(0);
+}
+
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 16px;
+  border-bottom: 1.5px solid var(--border-color);
+}
+
+.drawer-couple-tag {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--burgundy);
+}
+
+.btn-icon-close {
+  background: var(--blush-pink-light);
+  border: 1px solid var(--border-color);
+  color: var(--burgundy);
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.drawer-nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 16px;
+  overflow-y: auto;
+}
+
+.drawer-section-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  padding: 0 8px 6px;
+}
+
+.drawer-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  text-decoration: none;
+  color: var(--text-main);
+  font-size: 15px;
+  font-weight: 700;
+  transition: background 0.15s, color 0.15s;
+}
+
+.drawer-link:hover {
+  background: var(--blush-pink-light);
+}
+
+.drawer-link.active {
+  background: var(--burgundy);
+  color: #FFFFFF;
+}
+
+.drawer-link-icon {
+  font-size: 17px;
+}
+
+.drawer-footer {
+  padding-top: 14px;
+  border-top: 1.5px solid var(--border-color);
+}
+
+/* ==========================================
+   상단 고정 헤더 & 햄버거 버튼
+========================================== */
+.site-header {
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(10px);
+  border-bottom: 2px solid var(--blush-pink);
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+
+.header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 58px;
+  gap: 8px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 가로 작대기 3개 햄버거 아이콘 버튼 */
+.btn-hamburger {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  border: 1.5px solid var(--blush-pink);
+  background: #FFFFFF;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4.5px;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.btn-hamburger:active {
+  background: var(--blush-pink-light);
+}
+
+.hamburger-bar {
+  display: block;
+  width: 18px;
+  height: 2.2px;
+  background-color: var(--burgundy);
+  border-radius: 2px;
+}
+
+.brand-title {
+  font-size: 17.5px;
+  font-weight: 800;
+  color: var(--burgundy);
+  white-space: nowrap;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sync-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--blush-pink-light);
+  border: 1px solid var(--border-color);
+  padding: 5px 9px;
+  border-radius: 999px;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #F59E0B;
+}
+
+.sync-badge.online .status-dot {
+  background: #10B981;
+}
+
+/* ==========================================
+   메인 레이아웃 (모바일 퍼스트 -> 데스크톱 2단 확장)
+========================================== */
+.main-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 모바일에서는 일정 추가 폼을 버튼으로 접고 펼 수 있게 구성 */
+.btn-mobile-add {
+  width: 100%;
+  background: var(--burgundy);
+  color: #FFFFFF;
+  border: none;
+  border-radius: 14px;
+  padding: 13px 16px;
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: var(--shadow-soft);
+}
+
+.mobile-collapsible {
+  display: none;
+}
+
+.mobile-collapsible.open {
+  display: block;
+}
+
+.content-area {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* 공통 카드 */
+.card {
+  background: var(--bg-card);
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  box-shadow: var(--shadow-soft);
+}
+
+.card-header h2 {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--burgundy);
+  margin-bottom: 4px;
+}
+
+.card-header p {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+
+/* 폼 요소 (모바일 iOS 자동 줌 방지를 위해 16px 적용) */
+.schedule-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.form-group label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+select,
+input[type="text"],
+input[type="date"],
+input[type="number"] {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border-color);
+  background: #FFFDFD;
+  font-family: inherit;
+  font-size: 16px; /* iOS Safari 포커스 확대 방지 */
+  color: var(--text-main);
+  outline: none;
+}
+
+select:focus,
+input:focus {
+  border-color: var(--burgundy);
+  box-shadow: 0 0 0 3px rgba(244, 194, 194, 0.45);
+}
+
+/* 사용자 선택 버튼 */
+.user-selector {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.user-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 11px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border-color);
+  background: #FFFFFF;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.user-btn.active[data-user="A"] {
+  background: var(--blush-pink);
+  border-color: var(--burgundy);
+  color: var(--burgundy);
+}
+
+.user-btn.active[data-user="B"] {
+  background: var(--burgundy);
+  border-color: var(--burgundy);
+  color: #FFFFFF;
+}
+
+.user-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.dot-a {
+  background: var(--blush-pink);
+  border: 2px solid var(--burgundy);
+}
+
+.dot-b {
+  background: var(--burgundy);
+  border: 2px solid var(--blush-pink);
+}
+
+/* 공통 버튼 */
+.btn-primary {
+  background: var(--burgundy);
+  color: #FFFFFF;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.btn-outline {
+  background: #FFFFFF;
+  color: var(--burgundy);
+  border: 1.5px solid var(--blush-pink);
+  border-radius: 99px;
+  padding: 6px 12px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-outline-full {
+  width: 100%;
+  background: var(--blush-pink-soft);
+  color: var(--burgundy);
+  border: 1.5px solid var(--burgundy);
+  border-radius: var(--radius-md);
+  padding: 11px 14px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.sidebar-footer {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-color);
+  text-align: right;
+}
+
+.btn-text-danger {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.form-error {
+  font-size: 12px;
+  font-weight: 600;
+  color: #D92D20;
+  background: #FEF3F2;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+/* ==========================================
+   생리 주기 주간 케어 & 숨김 설정/더보기
+========================================== */
+.cycle-weekly-card {
+  background: linear-gradient(135deg, #FFF7F8 0%, #FFFFFF 100%);
+  border: 2px solid var(--blush-pink);
+}
+
+.cycle-weekly-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.cycle-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.cycle-tag {
+  font-size: 10px;
+  font-weight: 800;
+  color: #FFFFFF;
+  background: var(--burgundy);
+  padding: 2px 7px;
+  border-radius: 99px;
+}
+
+.cycle-dday-pill {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--burgundy);
+  background: var(--blush-pink);
+  padding: 2px 9px;
+  border-radius: 99px;
+}
+
+.cycle-weekly-top h2 {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--burgundy);
+}
+
+.cycle-status-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.cycle-action-btns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.cycle-action-btns button {
+  flex: 1;
+  text-align: center;
+  justify-content: center;
+}
+
+.btn-more-toggle {
+  background: var(--burgundy);
+  color: #FFFFFF;
+  border: none;
+  border-radius: 99px;
+  padding: 7px 12px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cycle-config-panel {
+  background: #FFFFFF;
+  border: 1.5px solid var(--blush-pink);
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.cycle-inline-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.cycle-inline-form .form-group:first-child {
+  grid-column: 1 / -1;
+}
+
+.btn-save-cycle {
+  grid-column: 1 / -1;
+}
+
+.weekly-cycle-issues {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.weekly-issue-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1.5px solid transparent;
+}
+
+.weekly-issue-chip.type-period {
+  background: var(--period-bg);
+  border-color: var(--period-border);
+  color: var(--period-text);
+}
+
+.weekly-issue-chip.type-fertile {
+  background: var(--fertile-bg);
+  border-color: var(--fertile-border);
+  color: var(--fertile-text);
+}
+
+.weekly-issue-chip.type-ovulation {
+  background: var(--ovulation-bg);
+  border-color: var(--ovulation-border);
+  color: var(--ovulation-text);
+}
+
+.weekly-issue-chip.type-pms {
+  background: var(--pms-bg);
+  border-color: var(--pms-border);
+  color: var(--pms-text);
+}
+
+.issue-chip-date {
+  font-size: 11px;
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+.issue-chip-label {
+  font-size: 12.5px;
+  font-weight: 800;
+}
+
+.empty-box {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+  background: rgba(244, 194, 194, 0.16);
+  border-radius: 10px;
+}
+
+/* 더보기 확장 패널 */
+.cycle-more-panel {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1.5px dashed var(--blush-pink);
+}
+
+.cycle-more-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+.monthly-cal-box {
+  background: #FFFFFF;
+  border: 1.5px solid var(--border-color);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.monthly-cal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.monthly-cal-header h3 {
+  font-size: 14.5px;
+  font-weight: 800;
+  color: var(--burgundy);
+}
+
+.btn-icon {
+  background: var(--blush-pink-light);
+  border: 1px solid var(--border-color);
+  color: var(--burgundy);
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.monthly-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+
+.cal-day {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.cal-day.other-month { opacity: 0.3; }
+.cal-day.today { border: 1.5px solid var(--burgundy); font-weight: 800; }
+.cal-day.type-period { background: var(--period-bg); color: var(--period-text); font-weight: 800; }
+.cal-day.type-fertile { background: var(--fertile-bg); color: var(--fertile-text); }
+.cal-day.type-ovulation { background: var(--ovulation-bg); color: var(--ovulation-text); border: 1.5px solid var(--ovulation-border); font-weight: 800; }
+.cal-day.type-pms { background: var(--pms-bg); color: var(--pms-text); }
+
+.cal-day-icon {
+  font-size: 8px;
+  line-height: 1;
+}
+
+.cal-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.dot-legend {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 3px;
+}
+
+.lg-period { background: var(--burgundy); }
+.lg-fertile { background: #9333EA; }
+.lg-ovulation { background: #DB2777; }
+.lg-pms { background: #D97706; }
+
+.upcoming-cycles-box h3 {
+  font-size: 14.5px;
+  font-weight: 800;
+  color: var(--burgundy);
+}
+
+.upcoming-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.upcoming-cycles-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.upcoming-cycle-row {
+  background: #FFFFFF;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 9px 11px;
+  display: grid;
+  grid-template-columns: 62px 1fr;
+  gap: 8px;
+  align-items: center;
+  font-size: 11.5px;
+}
+
+.cycle-order-badge {
+  background: var(--blush-pink-soft);
+  color: var(--burgundy);
+  font-weight: 800;
+  font-size: 11px;
+  text-align: center;
+  padding: 4px;
+  border-radius: 6px;
+}
+
+.cycle-row-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* ==========================================
+   모바일 퍼스트 주간 시간표 (한 화면에 7일 표시)
+========================================== */
+.timetable-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.timetable-header h2 {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--burgundy);
+}
+
+.timetable-header p {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.week-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-week-nav,
+.btn-week-today {
+  background: var(--blush-pink-light);
+  border: 1px solid var(--border-color);
+  color: var(--burgundy);
+  padding: 5px 9px;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.btn-week-today {
+  background: var(--blush-pink);
+}
+
+.current-week-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--burgundy);
+  padding: 0 4px;
+}
+
+.legend-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend-box {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+}
+
+.box-a { background: var(--blush-pink); border: 1.5px solid var(--burgundy); }
+.box-b { background: rgba(128, 0, 32, 0.85); }
+.box-free { background: rgba(244, 194, 194, 0.3); border: 1.5px dashed var(--burgundy); }
+
+.btn-free-toggle {
+  background: #FFFFFF;
+  color: var(--text-muted);
+  border: 1.5px solid var(--border-color);
+  border-radius: 99px;
+  padding: 4px 10px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-free-toggle.active {
+  background: var(--blush-pink-soft);
+  color: var(--burgundy);
+  border-color: var(--burgundy);
+}
+
+.timetable-scroll {
+  width: 100%;
+  overflow-x: hidden;
+}
+
+.timetable {
+  width: 100%;
+  border: 1.5px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #FFFFFF;
+}
+
+/* 모바일 화면에서도 가로 스크롤 없이 7일이 한눈에 보이도록 36px + 7등분 */
+.tt-header-row,
+.tt-cycle-row,
+.tt-body {
+  display: grid;
+  grid-template-columns: 36px repeat(7, minmax(0, 1fr));
+}
+
+.tt-header-row {
+  background: var(--blush-pink-light);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.tt-time-col-header,
+.tt-day-header {
+  padding: 6px 2px;
+  text-align: center;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--burgundy);
+  border-right: 1px solid var(--border-color);
+}
+
+.tt-day-header:last-child { border-right: none; }
+
+.tt-day-date {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.tt-cycle-row {
+  background: #FFF9FA;
+  border-bottom: 1.5px solid var(--border-color);
+}
+
+.tt-cycle-label {
+  font-size: 9.5px;
+  font-weight: 800;
+  color: var(--burgundy);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  border-right: 1px solid var(--border-color);
+  padding: 2px;
+}
+
+.tt-cycle-cell {
+  padding: 3px 2px;
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+}
+
+.tt-cycle-cell:last-child { border-right: none; }
+
+.tt-cycle-badge {
+  display: inline-block;
+  width: 100%;
+  text-align: center;
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 2px 1px;
+  border-radius: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tt-cycle-badge.type-period { background: var(--period-bg); color: var(--period-text); border: 1px solid var(--period-border); }
+.tt-cycle-badge.type-fertile { background: var(--fertile-bg); color: var(--fertile-text); border: 1px solid var(--fertile-border); }
+.tt-cycle-badge.type-ovulation { background: var(--ovulation-bg); color: var(--ovulation-text); border: 1px solid var(--ovulation-border); }
+.tt-cycle-badge.type-pms { background: var(--pms-bg); color: var(--pms-text); border: 1px solid var(--pms-border); }
+
+.tt-cycle-none {
+  font-size: 10px;
+  color: #D5B8BE;
+}
+
+.tt-time-col {
+  border-right: 1px solid var(--border-color);
+  background: #FFFDFD;
+}
+
+.tt-time-label {
+  height: var(--hour-height);
+  border-bottom: 1px solid #F7E6E8;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 3px;
+}
+
+.tt-day-col {
+  position: relative;
+  border-right: 1px solid var(--border-color);
+  background-image: linear-gradient(to bottom, #F7E6E8 1px, transparent 1px);
+  background-size: 100% var(--hour-height);
+}
+
+.tt-day-col:last-child { border-right: none; }
+
+/* 개인 스케줄 블록 */
+.tt-block {
+  position: absolute;
+  top: 0;
+  border-radius: 6px;
+  padding: 2px 3px;
+  font-size: 9.5px;
+  line-height: 1.15;
+  overflow: hidden;
+  cursor: pointer;
+  z-index: 3;
+}
+
+.tt-block.block-a {
+  left: 1px;
+  width: calc(50% - 1.5px);
+  background: var(--blush-pink);
+  color: var(--burgundy);
+  border: 1px solid var(--burgundy);
+}
+
+.tt-block.block-b {
+  left: calc(50% + 0.5px);
+  width: calc(50% - 1.5px);
+  background: rgba(128, 0, 32, 0.88);
+  color: #FFFFFF;
+  border: 1px solid var(--burgundy);
+}
+
+.block-title {
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.block-place {
+  font-size: 8.5px;
+  opacity: 0.92;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-all;
+}
+
+/* 도출된 공통 공강 구간 */
+.tt-free-slot {
+  position: absolute;
+  left: 1.5px;
+  right: 1.5px;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(244, 194, 194, 0.18),
+    rgba(244, 194, 194, 0.18) 5px,
+    rgba(255, 255, 255, 0.65) 5px,
+    rgba(255, 255, 255, 0.65) 10px
+  );
+  border: 1px dashed rgba(128, 0, 32, 0.45);
+  border-radius: 6px;
+  z-index: 1;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px;
+}
+
+.tt-free-badge {
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--burgundy);
+  border: 1px solid var(--blush-pink);
+  font-size: 8.5px;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 99px;
+  text-align: center;
+  line-height: 1.1;
+}
+
+/* 서브 서비스 페이지 공통 플레이스홀더 카드 */
+.service-placeholder-card {
+  text-align: center;
+  padding: 48px 20px;
+  margin-top: 20px;
+}
+
+.service-placeholder-icon {
+  font-size: 42px;
+  margin-bottom: 12px;
+}
+
+.service-placeholder-card h2 {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--burgundy);
+  margin-bottom: 8px;
+}
+
+.service-placeholder-card p {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+}
+
+/* 모달 */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(46, 21, 27, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 120;
+}
+
+.modal-box {
+  background: #FFFFFF;
+  border: 2px solid var(--blush-pink);
+  border-radius: var(--radius-lg);
+  padding: 22px;
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal-box h3 {
+  color: var(--burgundy);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.modal-box p {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* ==========================================
+   PC / 태블릿 가로 화면 (960px 이상) 반응형 확장
+========================================== */
+@media (min-width: 960px) {
+  :root {
+    --hour-height: 50px;
+  }
+
+  .container {
+    padding: 0 24px;
+  }
+
+  .main-layout {
+    display: grid;
+    grid-template-columns: 330px 1fr;
+    gap: 24px;
+    margin-top: 24px;
+    align-items: start;
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 82px;
+  }
+
+  .btn-mobile-add {
+    display: none;
+  }
+
+  .mobile-collapsible {
+    display: block !important;
+  }
+
+  .cycle-action-btns {
+    width: auto;
+  }
+
+  .cycle-action-btns button {
+    flex: initial;
+  }
+
+  .cycle-inline-form {
+    grid-template-columns: 1.3fr 1fr 1fr auto;
+    align-items: end;
+  }
+
+  .cycle-inline-form .form-group:first-child {
+    grid-column: auto;
+  }
+
+  .btn-save-cycle {
+    grid-column: auto;
+    height: 42px;
+  }
+
+  .cycle-more-grid {
+    grid-template-columns: 330px 1fr;
+  }
+
+  .tt-header-row,
+  .tt-cycle-row,
+  .tt-body {
+    grid-template-columns: 58px repeat(7, minmax(0, 1fr));
+  }
+
+  .tt-cycle-badge,
+  .tt-block {
+    font-size: 11px;
+    padding: 4px 6px;
+  }
+
+  .block-place,
+  .tt-free-badge {
+    font-size: 10px;
+  }
+}
