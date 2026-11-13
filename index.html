@@ -66,9 +66,9 @@
 
       <!-- 우측 상단: 3단계 접속 상태 배너 -->
       <div class="header-actions">
-        <div id="sync-status" class="sync-badge mode-alone">
+        <div id="sync-status" class="sync-badge mode-local">
           <span class="status-dot"></span>
-          <span id="sync-text">혼자 접속 중...</span>
+          <span id="sync-text">로컬 모드</span>
         </div>
       </div>
     </div>
@@ -158,74 +158,80 @@
 
     <!-- 우측(모바일 메인) 콘텐츠 영역 -->
     <section class="content-area">
-      <!-- 1. 금주의 강쥐지직 카드 -->
-      <div class="card cycle-weekly-card">
-        <div class="cycle-weekly-top">
-          <div>
-            <div class="cycle-badge-row">
-              <span id="cycle-dday-badge" class="cycle-dday-pill">계산 중...</span>
+      <!-- 1. 예정된 강쥐지직 열람 접이식 배너 & 카드 -->
+      <div class="cycle-fold-group">
+        <button type="button" id="btn-cycle-card-toggle" class="btn-fold-banner">
+          예정된 강쥐지직 열람 ▾
+        </button>
+
+        <div id="cycle-weekly-card" class="card cycle-weekly-card hidden">
+          <div class="cycle-weekly-top">
+            <div>
+              <div class="cycle-badge-row">
+                <span id="cycle-dday-badge" class="cycle-dday-pill">계산 중...</span>
+              </div>
+              <h2 id="cycle-week-title">금주의 강쥐지직</h2>
+              <p id="cycle-status-desc" class="cycle-status-desc"></p>
             </div>
-            <h2 id="cycle-week-title">금주의 강쥐지직</h2>
-            <p id="cycle-status-desc" class="cycle-status-desc"></p>
+
+            <div class="cycle-action-btns">
+              <button type="button" id="btn-toggle-cycle-config" class="btn-outline">
+                주기 설정
+              </button>
+              <button type="button" id="btn-toggle-cycle-more" class="btn-more-toggle">
+                전체 일정 더보기 ▾
+              </button>
+            </div>
           </div>
 
-          <div class="cycle-action-btns">
-            <button type="button" id="btn-toggle-cycle-config" class="btn-outline">
-              주기 설정
-            </button>
-            <button type="button" id="btn-toggle-cycle-more" class="btn-more-toggle">
-              전체 일정 더보기 ▾
-            </button>
+          <!-- [주기 설정] 클릭 시 펼쳐지는 입력창 -->
+          <div id="cycle-config-panel" class="cycle-config-panel hidden">
+            <form id="cycle-form" class="cycle-inline-form" novalidate>
+              <div class="form-group">
+                <label for="cycle-last-date">마지막 생리 시작일</label>
+                <input type="date" id="cycle-last-date" />
+              </div>
+              <div class="form-group">
+                <label for="cycle-length">평균 주기 (일)</label>
+                <input type="number" id="cycle-length" min="20" max="45" value="28" />
+              </div>
+              <div class="form-group">
+                <label for="period-length">생리 기간 (일)</label>
+                <input type="number" id="period-length" min="2" max="10" value="5" />
+              </div>
+              <button type="submit" class="btn-primary btn-save-cycle">저장</button>
+            </form>
           </div>
-        </div>
 
-        <!-- [주기 설정] 클릭 시 펼쳐지는 입력창 -->
-        <div id="cycle-config-panel" class="cycle-config-panel hidden">
-          <form id="cycle-form" class="cycle-inline-form" novalidate>
-            <div class="form-group">
-              <label for="cycle-last-date">마지막 생리 시작일</label>
-              <input type="date" id="cycle-last-date" />
-            </div>
-            <div class="form-group">
-              <label for="cycle-length">평균 주기 (일)</label>
-              <input type="number" id="cycle-length" min="20" max="45" value="28" />
-            </div>
-            <div class="form-group">
-              <label for="period-length">생리 기간 (일)</label>
-              <input type="number" id="period-length" min="2" max="10" value="5" />
-            </div>
-            <button type="submit" class="btn-primary btn-save-cycle">저장</button>
-          </form>
-        </div>
+          <!-- 이번 주에 해당하는 이슈 칩 리스트 -->
+          <div id="weekly-cycle-issues" class="weekly-cycle-issues"></div>
 
-        <!-- 이번 주에 해당하는 이슈 칩 리스트 -->
-        <div id="weekly-cycle-issues" class="weekly-cycle-issues"></div>
-
-        <!-- [전체 일정 더보기] 클릭 시 펼쳐지는 영역 -->
-        <div id="cycle-more-panel" class="cycle-more-panel hidden">
-          <div class="cycle-more-grid">
-            <div class="monthly-cal-box">
-              <div class="monthly-cal-header">
-                <button type="button" id="btn-prev-month" class="btn-icon">◀</button>
-                <h3 id="cal-month-label">2026년 11월</h3>
-                <button type="button" id="btn-next-month" class="btn-icon">▶</button>
+          <!-- [전체 일정 더보기] 클릭 시 펼쳐지는 영역 -->
+          <div id="cycle-more-panel" class="cycle-more-panel hidden">
+            <div class="cycle-more-grid">
+              <div class="monthly-cal-box">
+                <div class="monthly-cal-header">
+                  <button type="button" id="btn-prev-month" class="btn-icon">◀</button>
+                  <h3 id="cal-month-label">2026년 11월</h3>
+                  <button type="button" id="btn-next-month" class="btn-icon">▶</button>
+                </div>
+                <div class="cal-weekdays">
+                  <span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
+                </div>
+                <div id="monthly-cal-grid" class="monthly-cal-grid"></div>
+                <div class="cal-legend">
+                  <span><i class="dot-legend lg-period"></i>생리 예정</span>
+                  <span><i class="dot-legend lg-fertile"></i>가임기</span>
+                  <span><i class="dot-legend lg-ovulation"></i>배란일</span>
+                  <span><i class="dot-legend lg-pms"></i>PMS</span>
+                </div>
               </div>
-              <div class="cal-weekdays">
-                <span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
-              </div>
-              <div id="monthly-cal-grid" class="monthly-cal-grid"></div>
-              <div class="cal-legend">
-                <span><i class="dot-legend lg-period"></i>생리 예정</span>
-                <span><i class="dot-legend lg-fertile"></i>가임기</span>
-                <span><i class="dot-legend lg-ovulation"></i>배란일</span>
-                <span><i class="dot-legend lg-pms"></i>PMS</span>
-              </div>
-            </div>
 
-            <div class="upcoming-cycles-box">
-              <h3>향후 6주기 전체 예측 일정</h3>
-              <p class="upcoming-sub">설정된 주기를 바탕으로 계산된 예정 스케줄입니다.</p>
-              <div id="upcoming-cycles-list" class="upcoming-cycles-list"></div>
+              <div class="upcoming-cycles-box">
+                <h3>향후 6주기 전체 예측 일정</h3>
+                <p class="upcoming-sub">설정된 주기를 바탕으로 계산된 예정 스케줄입니다.</p>
+                <div id="upcoming-cycles-list" class="upcoming-cycles-list"></div>
+              </div>
             </div>
           </div>
         </div>

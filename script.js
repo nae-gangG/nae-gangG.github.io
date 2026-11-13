@@ -6,24 +6,20 @@ import {
   onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-/**
- * [실시간 동기화 설정]
- * Firebase 프로젝트 키를 입력하면 두 사람의 기기(갤럭시 & 아이폰)가 실시간 연동됩니다.
- */
 const firebaseConfig = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: ""
+  apiKey: "AIzaSyD043muv8n5HRRIsYMLQxh-oZy9cuE2HYY",
+  authDomain: "nae-gangg-24958.firebaseapp.com",
+  projectId: "nae-gangg-24958",
+  storageBucket: "nae-gangg-24958.firebasestorage.app",
+  messagingSenderId: "925867766886",
+  appId: "1:925867766886:web:aab1ef0a0868287b3fa9a7"
 };
 
 const START_HOUR = 9;
 const END_HOUR = 22;
 const SHORT_DAYS = ["월", "화", "수", "목", "금", "토", "일"];
 const PRESENCE_TIMEOUT_MS = 35000;
-const HEARTBEAT_INTERVAL_MS = 15000;
+const HEARTBEAT_INTERVAL_MS = 12000;
 
 function getHourHeight() {
   return window.innerWidth >= 960 ? 50 : 44;
@@ -35,17 +31,18 @@ function getDefaultLastPeriodDate() {
   return formatDateYMD(d);
 }
 
-function getOrCreateSessionId() {
-  const key = "couple_session_id_v1";
-  let sid = sessionStorage.getItem(key);
-  if (!sid) {
-    sid = "sess_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
-    sessionStorage.setItem(key, sid);
+// 기기(브라우저/앱)별 고유 ID 생성 (같은 폰에서 탭을 여러 개 열어도 1명으로 정확히 계산)
+function getOrCreateDeviceId() {
+  const key = "couple_device_id_v1";
+  let did = localStorage.getItem(key);
+  if (!did) {
+    did = "dev_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
+    localStorage.setItem(key, did);
   }
-  return sid;
+  return did;
 }
 
-const SESSION_ID = getOrCreateSessionId();
+const DEVICE_ID = getOrCreateDeviceId();
 
 let state = {
   selectedUser: "A",
@@ -66,12 +63,14 @@ let currentWeekOffset = 0;
 let calYear = new Date().getFullYear();
 let calMonth = new Date().getMonth();
 let pendingConfirmAction = null;
-let deferredInstallPrompt = null; // 갤럭시(Android) 원클릭 PWA 설치 이벤트 저장용
+let deferredInstallPrompt = null;
 
 let db = null;
 let sharedDocRef = null;
 let presenceDocRef = null;
-let latestPresenceMap = { [SESSION_ID]: Date.now() };
+let isCloudConnected = false;      // 실제 Firebase DB와 연결되었는지 여부
+let hasLoadedFromCloud = false;    // 새 기기가 빈 데이터로 DB를 덮어쓰는 것을 막는 플래그
+let latestPresenceMap = {};
 
 const LOCAL_STORAGE_KEY = "gangjwi_seungyi_schedule_v5";
 
@@ -117,6 +116,9 @@ const timetableBodyEl = document.getElementById("timetable-body");
 const btnToggleFreeView = document.getElementById("btn-toggle-free-view");
 const btnClearAll = document.getElementById("btn-clear-all");
 
+// 예정된 강쥐지직 열람 접이식 배너 및 내부 DOM
+const btnCycleCardToggle = document.getElementById("btn-cycle-card-toggle");
+const cycleWeeklyCard = document.getElementById("cycle-weekly-card");
 const btnToggleCycleConfig = document.getElementById("btn-toggle-cycle-config");
 const cycleConfigPanel = document.getElementById("cycle-config-panel");
 const cycleForm = document.getElementById("cycle-form");
@@ -198,7 +200,7 @@ function bindCommonEvents() {
     });
   }
 
-  // 갤럭시(Android) 뒤로가기 제스처/버튼을 눌렀을 때 앱이 꺼지지 않고 열린 메뉴/모달만 닫히도록 처리
+  // 갤럭시(Android) 뒤로가기 제스처 시 열린 메뉴/모달 닫기
   window.addEventListener("popstate", () => {
     if (navDrawer && navDrawer.classList.contains("open")) {
       navDrawer.classList.remove("open");
@@ -214,7 +216,6 @@ function bindCommonEvents() {
     }
   });
 
-  // 와이파이 / 셀룰러 데이터 연결 및 갤럭시 화면 켜짐(focus/pageshow) 즉시 반영
   window.addEventListener("online", () => {
     sendPresenceHeartbeat(true);
     updateSyncBadgeUI();
@@ -236,7 +237,6 @@ function bindCommonEvents() {
   });
 }
 
-// 오버레이 열릴 때 히스토리 스택을 1칸 추가해 갤럭시 뒤로가기 제스처를 가로챔
 function pushOverlayState() {
   if (window.history && window.history.pushState) {
     window.history.pushState({ overlayOpen: true }, "");
@@ -244,27 +244,29 @@ function pushOverlayState() {
 }
 
 // ==========================================
-// 3단계 접속 상태 배너 (갤럭시/아이폰 셀룰러 & 와이파이 공용)
+// 3단계 접속 상태 배너 (실제 DB 연결 및 동시 접속 기반)
 // ==========================================
 function updateSyncBadgeUI() {
   if (!syncStatusEl || !syncTextEl) return;
 
   syncStatusEl.classList.remove("mode-local", "mode-alone", "mode-both");
 
-  if (navigator.onLine === false) {
+  // 1) 인터넷이 끊겼거나 아직 firebaseConfig를 안 넣은 경우 -> '로컬 모드'
+  if (navigator.onLine === false || !isCloudConnected) {
     syncStatusEl.classList.add("mode-local");
     syncTextEl.textContent = "로컬 모드";
     return;
   }
 
+  // 2) DB 연결 완료 시 현재 살아있는 기기 수 계산
   const now = Date.now();
-  latestPresenceMap[SESSION_ID] = now;
-
-  const activeSessions = Object.entries(latestPresenceMap).filter(
+  const activeDevices = Object.entries(latestPresenceMap).filter(
     ([, lastSeen]) => typeof lastSeen === "number" && now - lastSeen < PRESENCE_TIMEOUT_MS
   );
 
-  if (activeSessions.length >= 2) {
+  const activeCount = Math.max(1, activeDevices.length);
+
+  if (activeCount >= 2) {
     syncStatusEl.classList.add("mode-both");
     syncTextEl.textContent = "둘 다 접속 중!!!";
   } else {
@@ -274,17 +276,18 @@ function updateSyncBadgeUI() {
 }
 
 async function sendPresenceHeartbeat(isActive = true) {
-  latestPresenceMap[SESSION_ID] = isActive ? Date.now() : 0;
-  updateSyncBadgeUI();
-
   if (!presenceDocRef || navigator.onLine === false) return;
+
+  const timestamp = isActive ? Date.now() : 0;
+  latestPresenceMap[DEVICE_ID] = timestamp;
+  updateSyncBadgeUI();
 
   try {
     await setDoc(
       presenceDocRef,
       {
-        sessions: {
-          [SESSION_ID]: isActive ? Date.now() : 0
+        devices: {
+          [DEVICE_ID]: timestamp
         }
       },
       { merge: true }
@@ -295,30 +298,31 @@ async function sendPresenceHeartbeat(isActive = true) {
 }
 
 function initPresenceTracking() {
-  updateSyncBadgeUI();
-
-  if (db) {
-    presenceDocRef = doc(db, "couple_space", "presence_v1");
-
-    onSnapshot(
-      presenceDocRef,
-      (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.data();
-          latestPresenceMap = {
-            ...(data.sessions || {}),
-            [SESSION_ID]: Date.now()
-          };
-        }
-        updateSyncBadgeUI();
-      },
-      () => {
-        updateSyncBadgeUI();
-      }
-    );
-
-    sendPresenceHeartbeat(true);
+  if (!db) {
+    updateSyncBadgeUI();
+    return;
   }
+
+  presenceDocRef = doc(db, "couple_space", "presence_v2");
+
+  onSnapshot(
+    presenceDocRef,
+    (snapshot) => {
+      isCloudConnected = true;
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        latestPresenceMap = data.devices || {};
+      }
+      updateSyncBadgeUI();
+    },
+    (err) => {
+      console.error("동시 접속 감지 오류:", err);
+      isCloudConnected = false;
+      updateSyncBadgeUI();
+    }
+  );
+
+  sendPresenceHeartbeat(true);
 
   setInterval(() => {
     if (document.visibilityState === "visible") {
@@ -339,6 +343,118 @@ function initPresenceTracking() {
   window.addEventListener("pagehide", () => {
     sendPresenceHeartbeat(false);
   });
+}
+
+// ==========================================
+// 실시간 Firebase Firestore DB 동기화 핵심 로직
+// ==========================================
+function initDataSync() {
+  // 1) 화면이 즉시 뜨도록 기기 캐시(localStorage) 우선 로드
+  const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      state.profiles = parsed.profiles || { A: "강쥐", B: "승이" };
+      state.schedules = parsed.schedules || [];
+      if (parsed.cycleConfig) {
+        state.cycleConfig = parsed.cycleConfig;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  const isFirebaseConfigured = Boolean(
+    firebaseConfig.apiKey &&
+    firebaseConfig.apiKey.trim() !== "" &&
+    firebaseConfig.projectId &&
+    firebaseConfig.projectId.trim() !== ""
+  );
+
+  // 2) firebaseConfig가 입력되어 있으면 즉시 클라우드 DB 연결
+  if (isFirebaseConfigured) {
+    try {
+      const app = initializeApp(firebaseConfig);
+      // 아이폰/갤럭시 셀룰러(LTE/5G) 환경에서도 끊기지 않도록 Long Polling 자동 감지 적용
+      db = initializeFirestore(app, {
+        experimentalAutoDetectLongPolling: true
+      });
+      sharedDocRef = doc(db, "couple_space", "weekly_schedule_v5");
+
+      onSnapshot(
+        sharedDocRef,
+        async (snapshot) => {
+          isCloudConnected = true;
+          hasLoadedFromCloud = true;
+          updateSyncBadgeUI();
+
+          if (snapshot.exists()) {
+            // 클라우드 DB에 저장된 최신 데이터를 내 화면과 로컬 캐시에 즉시 반영
+            const data = snapshot.data();
+            state.profiles = data.profiles || { A: "강쥐", B: "승이" };
+            state.schedules = data.schedules || [];
+            if (data.cycleConfig) {
+              state.cycleConfig = data.cycleConfig;
+              if (isSchedulerPage) syncCycleFormInputs();
+            }
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+            renderAll();
+          } else {
+            // DB를 처음 연결해서 클라우드 문서가 아직 비어있다면, 현재 기기에 있던 스케줄을 DB에 자동 업로드
+            await saveData();
+          }
+        },
+        (err) => {
+          console.error("Firestore DB 읽기 오류 (규칙 탭을 확인하세요):", err);
+          isCloudConnected = false;
+          updateSyncBadgeUI();
+        }
+      );
+
+      initPresenceTracking();
+      return;
+    } catch (err) {
+      console.error("Firebase 초기화 실패:", err);
+    }
+  }
+
+  // firebaseConfig가 아직 비어 있을 때는 로컬 모드로 작동
+  isCloudConnected = false;
+  updateSyncBadgeUI();
+
+  window.addEventListener("storage", (e) => {
+    if (e.key === LOCAL_STORAGE_KEY && e.newValue) {
+      const parsed = JSON.parse(e.newValue);
+      state.profiles = parsed.profiles || { A: "강쥐", B: "승이" };
+      state.schedules = parsed.schedules || [];
+      if (parsed.cycleConfig) {
+        state.cycleConfig = parsed.cycleConfig;
+        if (isSchedulerPage) syncCycleFormInputs();
+      }
+      renderAll();
+    }
+  });
+}
+
+async function saveData() {
+  const payload = {
+    profiles: state.profiles,
+    schedules: state.schedules,
+    cycleConfig: state.cycleConfig,
+    updatedAt: Date.now()
+  };
+
+  // 로컬 캐시 저장
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload));
+
+  // 클라우드 DB가 연결되어 있고 초기 로드가 끝난 상태라면 DB에 즉시 저장
+  if (sharedDocRef && hasLoadedFromCloud) {
+    try {
+      await setDoc(sharedDocRef, payload);
+    } catch (err) {
+      console.error("실시간 DB 저장 오류:", err);
+    }
+  }
 }
 
 function openConfirmModal({ title, desc, okText = "확인", onConfirm }) {
@@ -405,90 +521,6 @@ function syncCycleFormInputs() {
   periodLengthInput.value = state.cycleConfig.periodLength;
 }
 
-function initDataSync() {
-  const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-  if (saved) {
-    try {
-      const parsed = JSON.parse(saved);
-      state.profiles = parsed.profiles || { A: "강쥐", B: "승이" };
-      state.schedules = parsed.schedules || [];
-      if (parsed.cycleConfig) {
-        state.cycleConfig = parsed.cycleConfig;
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  }
-
-  const isFirebaseConfigured = Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
-
-  if (isFirebaseConfigured) {
-    try {
-      const app = initializeApp(firebaseConfig);
-      db = initializeFirestore(app, {
-        experimentalAutoDetectLongPolling: true
-      });
-      sharedDocRef = doc(db, "couple_space", "weekly_schedule_v5");
-
-      onSnapshot(
-        sharedDocRef,
-        (snapshot) => {
-          updateSyncBadgeUI();
-          if (snapshot.exists()) {
-            const data = snapshot.data();
-            state.profiles = data.profiles || { A: "강쥐", B: "승이" };
-            state.schedules = data.schedules || [];
-            if (data.cycleConfig) {
-              state.cycleConfig = data.cycleConfig;
-              if (isSchedulerPage) syncCycleFormInputs();
-            }
-            renderAll();
-          }
-        },
-        () => {
-          updateSyncBadgeUI();
-        }
-      );
-    } catch (err) {
-      console.error("Firebase 초기화 실패:", err);
-    }
-  }
-
-  initPresenceTracking();
-
-  window.addEventListener("storage", (e) => {
-    if (e.key === LOCAL_STORAGE_KEY && e.newValue) {
-      const parsed = JSON.parse(e.newValue);
-      state.profiles = parsed.profiles || { A: "강쥐", B: "승이" };
-      state.schedules = parsed.schedules || [];
-      if (parsed.cycleConfig) {
-        state.cycleConfig = parsed.cycleConfig;
-        if (isSchedulerPage) syncCycleFormInputs();
-      }
-      renderAll();
-    }
-  });
-}
-
-async function saveData() {
-  const payload = {
-    profiles: state.profiles,
-    schedules: state.schedules,
-    cycleConfig: state.cycleConfig,
-    updatedAt: Date.now()
-  };
-
-  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload));
-
-  if (sharedDocRef && navigator.onLine) {
-    try {
-      await setDoc(sharedDocRef, payload);
-    } catch (err) {
-      console.error("실시간 저장 오류:", err);
-    }
-  }
-}
-
 function bindSchedulerEvents() {
   btnMobileFormToggle.addEventListener("click", () => {
     const isOpen = scheduleFormCard.classList.toggle("open");
@@ -496,6 +528,15 @@ function bindSchedulerEvents() {
       ? "개인 스케줄 등록창 접기 ▴"
       : "+ 개인 스케줄 등록하기 ▾";
   });
+
+  if (btnCycleCardToggle && cycleWeeklyCard) {
+    btnCycleCardToggle.addEventListener("click", () => {
+      const isHidden = cycleWeeklyCard.classList.toggle("hidden");
+      btnCycleCardToggle.textContent = isHidden
+        ? "예정된 강쥐지직 열람 ▾"
+        : "예정된 강쥐지직 접기 ▴";
+    });
+  }
 
   selectUserABtn.addEventListener("click", () => setSelectedUser("A"));
   selectUserBBtn.addEventListener("click", () => setSelectedUser("B"));
@@ -1127,10 +1168,8 @@ function initPwaSupport() {
     window.matchMedia("(display-mode: standalone)").matches;
   const isToastDismissed = localStorage.getItem("pwa-toast-dismissed") === "true";
 
-  // 이미 홈 화면 앱으로 실행 중이거나 닫기를 누른 경우 표시하지 않음
   if (isStandalone || isToastDismissed) return;
 
-  // 1) 갤럭시(Android): 크롬/삼성 인터넷 원클릭 설치 이벤트 감지
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
     deferredInstallPrompt = e;
@@ -1153,13 +1192,11 @@ function initPwaSupport() {
     });
   }
 
-  // 앱 설치 완료 시 토스트 즉시 숨김
   window.addEventListener("appinstalled", () => {
     pwaToast.classList.add("hidden");
     deferredInstallPrompt = null;
   });
 
-  // 2) iOS 사파리 또는 갤럭시 수동 설치(인앱 브라우저 등) 안내
   setTimeout(() => {
     if (isStandalone || localStorage.getItem("pwa-toast-dismissed") === "true") return;
 

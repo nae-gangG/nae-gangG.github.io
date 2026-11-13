@@ -46,7 +46,6 @@
 
 html,
 body {
-  /* 갤럭시 크롬/삼성 인터넷에서 스크롤 시 의도치 않은 당김 새로고침 방지 */
   overscroll-behavior-y: contain;
 }
 
@@ -72,7 +71,6 @@ body {
 
 /* ==========================================
    좌측 슬라이드 네비게이션 드로어
-   (닫기 버튼을 햄버거 버튼과 동일한 좌측 상단 위치에 고정)
 ========================================== */
 .drawer-backdrop {
   position: fixed;
@@ -314,12 +312,12 @@ body {
 }
 
 /* ==========================================
-   메인 레이아웃
+   메인 레이아웃 & 접이식 배너 버튼 공통 디자인
 ========================================== */
 .main-layout {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   margin-top: 14px;
 }
 
@@ -329,7 +327,15 @@ body {
   gap: 10px;
 }
 
-.btn-mobile-add {
+.cycle-fold-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* '+ 개인 스케줄 등록하기 ▾' 와 '예정된 강쥐지직 열람 ▾' 완전 동일한 디자인 */
+.btn-mobile-add,
+.btn-fold-banner {
   width: 100%;
   background: var(--burgundy);
   color: #FFFFFF;
@@ -341,6 +347,17 @@ body {
   font-weight: 800;
   cursor: pointer;
   box-shadow: var(--shadow-soft);
+  transition: background 0.15s, transform 0.1s;
+}
+
+.btn-mobile-add:hover,
+.btn-fold-banner:hover {
+  background: var(--burgundy-dark);
+}
+
+.btn-mobile-add:active,
+.btn-fold-banner:active {
+  transform: scale(0.99);
 }
 
 .mobile-collapsible {
@@ -354,7 +371,7 @@ body {
 .content-area {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .card {
@@ -1332,7 +1349,6 @@ input:focus {
   line-height: 1.5;
 }
 
-/* 갤럭시 원클릭 설치 버튼 */
 .btn-pwa-install {
   margin-top: 10px;
   width: 100%;
