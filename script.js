@@ -31,7 +31,6 @@ function getDefaultLastPeriodDate() {
   return formatDateYMD(d);
 }
 
-// 기기(브라우저/앱)별 고유 ID 생성 (같은 폰에서 탭을 여러 개 열어도 1명으로 정확히 계산)
 function getOrCreateDeviceId() {
   const key = "couple_device_id_v1";
   let did = localStorage.getItem(key);
@@ -58,7 +57,15 @@ let state = {
   }
 };
 
-let showDerivedFreeTime = true;
+// 새로고침이나 스케줄 추가/삭제 이벤트 시에도 접기·펼침 상태를 그대로 유지하기 위한 UI 상태
+let uiState = {
+  isScheduleFormOpen: false,
+  isCycleCardOpen: false,
+  isCycleConfigOpen: false,
+  isCycleMoreOpen: false,
+  showDerivedFreeTime: true
+};
+
 let currentWeekOffset = 0;
 let calYear = new Date().getFullYear();
 let calMonth = new Date().getMonth();
@@ -68,11 +75,12 @@ let deferredInstallPrompt = null;
 let db = null;
 let sharedDocRef = null;
 let presenceDocRef = null;
-let isCloudConnected = false;      // 실제 Firebase DB와 연결되었는지 여부
-let hasLoadedFromCloud = false;    // 새 기기가 빈 데이터로 DB를 덮어쓰는 것을 막는 플래그
+let isCloudConnected = false;
+let hasLoadedFromCloud = false;
 let latestPresenceMap = {};
 
 const LOCAL_STORAGE_KEY = "gangjwi_seungyi_schedule_v5";
+const UI_STATE_STORAGE_KEY = "gangjwi_seungyi_ui_state_v1";
 
 // 공통 DOM
 const btnOpenDrawer = document.getElementById("btn-open-drawer");
@@ -89,7 +97,7 @@ const btnSaveNickname = document.getElementById("btn-save-nickname");
 const inputNameA = document.getElementById("input-name-a");
 const inputNameB = document.getElementById("input-name-b");
 
-// 확인 모달 DOM
+// 확인/정보 모달 DOM
 const confirmModal = document.getElementById("confirm-modal");
 const confirmModalTitle = document.getElementById("confirm-modal-title");
 const confirmModalDesc = document.getElementById("confirm-modal-desc");
@@ -145,10 +153,12 @@ const currentWeekLabel = document.getElementById("current-week-label");
 init();
 
 function init() {
+  loadUiState();
   bindCommonEvents();
   if (isSchedulerPage) {
     populateTimeOptions();
     bindSchedulerEvents();
+    applyUiState();
   }
   initDataSync();
   if (isSchedulerPage) {
@@ -156,6 +166,69 @@ function init() {
   }
   renderAll();
   initPwaSupport();
+}
+
+// ==========================================
+// 접기/펼침 UI 상태 저장 및 복원 (새로고침·이벤트 시 유지)
+// ==========================================
+function loadUiState() {
+  const saved = localStorage.getItem(UI_STATE_STORAGE_KEY);
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      uiState = { ...uiState, ...parsed };
+    } catch (e) {
+      console.error(e);
+    }
+  }
+}
+
+function saveUiState() {
+  localStorage.setItem(UI_STATE_STORAGE_KEY, JSON.stringify(uiState));
+}
+
+function applyUiState() {
+  if (!isSchedulerPage) return;
+
+  // 1) 개인 스케줄 등록 폼 접기/펼침 상태 반영
+  if (scheduleFormCard && btnMobileFormToggle) {
+    scheduleFormCard.classList.toggle("open", Boolean(uiState.isScheduleFormOpen));
+    btnMobileFormToggle.textContent = uiState.isScheduleFormOpen
+      ? "개인 스케줄 등록창 접기 ▴"
+      : "+ 개인 스케줄 등록하기 ▾";
+  }
+
+  // 2) 예정된 강쥐지직 열람 카드 접기/펼침 상태 반영
+  if (cycleWeeklyCard && btnCycleCardToggle) {
+    cycleWeeklyCard.classList.toggle("hidden", !uiState.isCycleCardOpen);
+    btnCycleCardToggle.textContent = uiState.isCycleCardOpen
+      ? "예정된 강쥐지직 접기 ▴"
+      : "예정된 강쥐지직 열람 ▾";
+  }
+
+  // 3) 주기 설정 패널 접기/펼침 상태 반영
+  if (cycleConfigPanel && btnToggleCycleConfig) {
+    cycleConfigPanel.classList.toggle("hidden", !uiState.isCycleConfigOpen);
+    btnToggleCycleConfig.textContent = uiState.isCycleConfigOpen
+      ? "설정 닫기"
+      : "주기 설정";
+  }
+
+  // 4) 전체 일정 더보기 패널 접기/펼침 상태 반영
+  if (cycleMorePanel && btnToggleCycleMore) {
+    cycleMorePanel.classList.toggle("hidden", !uiState.isCycleMoreOpen);
+    btnToggleCycleMore.textContent = uiState.isCycleMoreOpen
+      ? "전체 일정 접기 ▴"
+      : "전체 일정 더보기 ▾";
+  }
+
+  // 5) 공강 표시 켜짐/꺼짐 상태 반영
+  if (btnToggleFreeView) {
+    btnToggleFreeView.classList.toggle("active", Boolean(uiState.showDerivedFreeTime));
+    btnToggleFreeView.textContent = uiState.showDerivedFreeTime
+      ? "공강 표시 켜짐"
+      : "공강 표시 꺼짐";
+  }
 }
 
 function bindCommonEvents() {
@@ -200,7 +273,6 @@ function bindCommonEvents() {
     });
   }
 
-  // 갤럭시(Android) 뒤로가기 제스처 시 열린 메뉴/모달 닫기
   window.addEventListener("popstate", () => {
     if (navDrawer && navDrawer.classList.contains("open")) {
       navDrawer.classList.remove("open");
@@ -244,21 +316,19 @@ function pushOverlayState() {
 }
 
 // ==========================================
-// 3단계 접속 상태 배너 (실제 DB 연결 및 동시 접속 기반)
+// 3단계 접속 상태 배너
 // ==========================================
 function updateSyncBadgeUI() {
   if (!syncStatusEl || !syncTextEl) return;
 
   syncStatusEl.classList.remove("mode-local", "mode-alone", "mode-both");
 
-  // 1) 인터넷이 끊겼거나 아직 firebaseConfig를 안 넣은 경우 -> '로컬 모드'
   if (navigator.onLine === false || !isCloudConnected) {
     syncStatusEl.classList.add("mode-local");
     syncTextEl.textContent = "로컬 모드";
     return;
   }
 
-  // 2) DB 연결 완료 시 현재 살아있는 기기 수 계산
   const now = Date.now();
   const activeDevices = Object.entries(latestPresenceMap).filter(
     ([, lastSeen]) => typeof lastSeen === "number" && now - lastSeen < PRESENCE_TIMEOUT_MS
@@ -349,7 +419,6 @@ function initPresenceTracking() {
 // 실시간 Firebase Firestore DB 동기화 핵심 로직
 // ==========================================
 function initDataSync() {
-  // 1) 화면이 즉시 뜨도록 기기 캐시(localStorage) 우선 로드
   const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
   if (saved) {
     try {
@@ -371,11 +440,9 @@ function initDataSync() {
     firebaseConfig.projectId.trim() !== ""
   );
 
-  // 2) firebaseConfig가 입력되어 있으면 즉시 클라우드 DB 연결
   if (isFirebaseConfigured) {
     try {
       const app = initializeApp(firebaseConfig);
-      // 아이폰/갤럭시 셀룰러(LTE/5G) 환경에서도 끊기지 않도록 Long Polling 자동 감지 적용
       db = initializeFirestore(app, {
         experimentalAutoDetectLongPolling: true
       });
@@ -389,7 +456,6 @@ function initDataSync() {
           updateSyncBadgeUI();
 
           if (snapshot.exists()) {
-            // 클라우드 DB에 저장된 최신 데이터를 내 화면과 로컬 캐시에 즉시 반영
             const data = snapshot.data();
             state.profiles = data.profiles || { A: "강쥐", B: "승이" };
             state.schedules = data.schedules || [];
@@ -400,12 +466,11 @@ function initDataSync() {
             localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
             renderAll();
           } else {
-            // DB를 처음 연결해서 클라우드 문서가 아직 비어있다면, 현재 기기에 있던 스케줄을 DB에 자동 업로드
             await saveData();
           }
         },
         (err) => {
-          console.error("Firestore DB 읽기 오류 (규칙 탭을 확인하세요):", err);
+          console.error("Firestore DB 읽기 오류:", err);
           isCloudConnected = false;
           updateSyncBadgeUI();
         }
@@ -418,7 +483,6 @@ function initDataSync() {
     }
   }
 
-  // firebaseConfig가 아직 비어 있을 때는 로컬 모드로 작동
   isCloudConnected = false;
   updateSyncBadgeUI();
 
@@ -444,10 +508,8 @@ async function saveData() {
     updatedAt: Date.now()
   };
 
-  // 로컬 캐시 저장
   localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload));
 
-  // 클라우드 DB가 연결되어 있고 초기 로드가 끝난 상태라면 DB에 즉시 저장
   if (sharedDocRef && hasLoadedFromCloud) {
     try {
       await setDoc(sharedDocRef, payload);
@@ -457,10 +519,14 @@ async function saveData() {
   }
 }
 
-function openConfirmModal({ title, desc, okText = "확인", onConfirm }) {
+function openConfirmModal({ title, desc, bodyHtml, okText = "확인", onConfirm }) {
   if (!confirmModal) return;
   confirmModalTitle.textContent = title;
-  confirmModalDesc.textContent = desc;
+  if (bodyHtml) {
+    confirmModalDesc.innerHTML = bodyHtml;
+  } else {
+    confirmModalDesc.textContent = desc || "";
+  }
   btnConfirmOk.textContent = okText;
   pendingConfirmAction = onConfirm;
   confirmModal.classList.remove("hidden");
@@ -522,19 +588,19 @@ function syncCycleFormInputs() {
 }
 
 function bindSchedulerEvents() {
+  // 1) 개인 스케줄 등록창 접기/펼치기 (상태 저장)
   btnMobileFormToggle.addEventListener("click", () => {
-    const isOpen = scheduleFormCard.classList.toggle("open");
-    btnMobileFormToggle.textContent = isOpen
-      ? "개인 스케줄 등록창 접기 ▴"
-      : "+ 개인 스케줄 등록하기 ▾";
+    uiState.isScheduleFormOpen = !uiState.isScheduleFormOpen;
+    saveUiState();
+    applyUiState();
   });
 
+  // 2) 예정된 강쥐지직 열람 카드 접기/펼치기 (상태 저장)
   if (btnCycleCardToggle && cycleWeeklyCard) {
     btnCycleCardToggle.addEventListener("click", () => {
-      const isHidden = cycleWeeklyCard.classList.toggle("hidden");
-      btnCycleCardToggle.textContent = isHidden
-        ? "예정된 강쥐지직 열람 ▾"
-        : "예정된 강쥐지직 접기 ▴";
+      uiState.isCycleCardOpen = !uiState.isCycleCardOpen;
+      saveUiState();
+      applyUiState();
     });
   }
 
@@ -558,11 +624,14 @@ function bindSchedulerEvents() {
     handleAddSchedule("this_week");
   });
 
+  // 3) 주기 설정 패널 접기/펼치기 (상태 저장)
   btnToggleCycleConfig.addEventListener("click", () => {
-    const isHidden = cycleConfigPanel.classList.toggle("hidden");
-    btnToggleCycleConfig.textContent = isHidden ? "주기 설정" : "설정 닫기";
+    uiState.isCycleConfigOpen = !uiState.isCycleConfigOpen;
+    saveUiState();
+    applyUiState();
   });
 
+  // 주기 설정 저장 시에도 접기/펼침 상태를 강제로 닫지 않고 유지
   cycleForm.addEventListener("submit", (e) => {
     e.preventDefault();
     const lastStartDate = cycleLastDateInput.value;
@@ -572,25 +641,22 @@ function bindSchedulerEvents() {
     if (!lastStartDate) return;
 
     state.cycleConfig = { lastStartDate, cycleLength, periodLength };
-    cycleConfigPanel.classList.add("hidden");
-    btnToggleCycleConfig.textContent = "주기 설정";
     saveData();
     renderAll();
   });
 
+  // 4) 전체 일정 더보기 접기/펼치기 (상태 저장)
   btnToggleCycleMore.addEventListener("click", () => {
-    const isHidden = cycleMorePanel.classList.toggle("hidden");
-    btnToggleCycleMore.textContent = isHidden
-      ? "전체 일정 더보기 ▾"
-      : "전체 일정 접기 ▴";
+    uiState.isCycleMoreOpen = !uiState.isCycleMoreOpen;
+    saveUiState();
+    applyUiState();
   });
 
+  // 5) 공강 표시 켜짐/꺼짐 (상태 저장)
   btnToggleFreeView.addEventListener("click", () => {
-    showDerivedFreeTime = !showDerivedFreeTime;
-    btnToggleFreeView.classList.toggle("active", showDerivedFreeTime);
-    btnToggleFreeView.textContent = showDerivedFreeTime
-      ? "공강 표시 켜짐"
-      : "공강 표시 꺼짐";
+    uiState.showDerivedFreeTime = !uiState.showDerivedFreeTime;
+    saveUiState();
+    applyUiState();
     renderAll();
   });
 
@@ -826,11 +892,7 @@ function handleAddSchedule(mode = "fixed") {
     currentWeekOffset = 0;
   }
 
-  if (window.innerWidth < 960) {
-    scheduleFormCard.classList.remove("open");
-    btnMobileFormToggle.textContent = "+ 개인 스케줄 등록하기 ▾";
-  }
-
+  // 등록 이벤트 발생 시에도 등록창의 접기/펼침 상태를 닫지 않고 그대로 유지
   saveData();
   renderAll();
 }
@@ -908,6 +970,7 @@ function renderAll() {
   renderProfileNames();
   if (!isSchedulerPage) return;
 
+  applyUiState();
   const weekDates = getWeekDates(currentWeekOffset);
   renderWeeklyCycleSection(weekDates);
   renderMonthlyCalendar();
@@ -1075,10 +1138,11 @@ function renderTimetable(weekDates) {
   let daysHtml = "";
   for (let day = 0; day < 7; day++) {
     const daySchedules = getSchedulesForWeek(day, viewedWeekKey);
-    const derivedFreeSlots = showDerivedFreeTime
+    const derivedFreeSlots = uiState.showDerivedFreeTime
       ? deriveFreeSlotsForDay(day, viewedWeekKey)
       : [];
 
+    // 도출된 공강: 시간 정보 없이 '공강'만 표시
     const freeHtml = derivedFreeSlots
       .map((slot) => {
         const startOffsetMin = slot.startMin - START_HOUR * 60;
@@ -1088,19 +1152,19 @@ function renderTimetable(weekDates) {
 
         return `
           <div class="tt-free-slot" style="top:${topPx}px; height:${heightPx}px;">
-            <span class="tt-free-badge">공강<br>${slot.start}~${slot.end}</span>
+            <span class="tt-free-badge">공강</span>
           </div>
         `;
       })
       .join("");
 
+    // 등록된 스케줄 블록: 글씨 없이 색상 블록만 표시
     const blocksHtml = daySchedules
       .map((item) => {
         const startOffsetMin = timeToMinutes(item.start) - START_HOUR * 60;
         const durationMin = timeToMinutes(item.end) - timeToMinutes(item.start);
         const topPx = (startOffsetMin / 60) * hourHeight;
         const heightPx = (durationMin / 60) * hourHeight;
-        const userName = item.user === "A" ? state.profiles.A : state.profiles.B;
         const blockClass = item.user === "A" ? "block-a" : "block-b";
         const onceClass = item.weekKey ? "block-once" : "";
 
@@ -1109,10 +1173,7 @@ function renderTimetable(weekDates) {
             class="tt-block ${blockClass} ${onceClass}"
             style="top:${topPx}px; height:${heightPx}px;"
             data-id="${item.id}"
-          >
-            <div class="block-title">${escapeHtml(userName)}</div>
-            <div class="block-place">${escapeHtml(item.location)}</div>
-          </div>
+          ></div>
         `;
       })
       .join("");
@@ -1122,6 +1183,7 @@ function renderTimetable(weekDates) {
 
   timetableBodyEl.innerHTML = timeColHtml + daysHtml;
 
+  // 블록 클릭 시 '스케줄 정보' 모달에 등록자·시간대·장소(내용)를 보기 좋게 표시
   timetableBodyEl.querySelectorAll(".tt-block").forEach((block) => {
     block.addEventListener("click", () => {
       const targetId = block.dataset.id;
@@ -1129,11 +1191,32 @@ function renderTimetable(weekDates) {
       if (!targetItem) return;
 
       const userName = targetItem.user === "A" ? state.profiles.A : state.profiles.B;
+      const userBadgeClass = targetItem.user === "A" ? "user-a" : "user-b";
       const typeLabel = targetItem.weekKey ? "이번 주만 등록된 일정" : "매주 고정 일정";
 
+      const infoHtml = `
+        <div class="schedule-info-card">
+          <div class="schedule-info-row">
+            <span class="schedule-info-label">등록자</span>
+            <span class="info-user-badge ${userBadgeClass}">${escapeHtml(userName)}</span>
+          </div>
+          <div class="schedule-info-row">
+            <span class="schedule-info-label">시간대</span>
+            <span class="schedule-info-value">
+              ${SHORT_DAYS[targetItem.day]}요일 ${targetItem.start} ~ ${targetItem.end}
+              <span class="schedule-info-sub">${typeLabel}</span>
+            </span>
+          </div>
+          <div class="schedule-info-row">
+            <span class="schedule-info-label">장소 · 내용</span>
+            <span class="schedule-info-value">${escapeHtml(targetItem.location)}</span>
+          </div>
+        </div>
+      `;
+
       openConfirmModal({
-        title: "스케줄 삭제",
-        desc: `[${userName}] ${SHORT_DAYS[targetItem.day]}요일 ${targetItem.start}~${targetItem.end} (${targetItem.location} · ${typeLabel})을 삭제할까요?`,
+        title: "스케줄 정보",
+        bodyHtml: infoHtml,
         okText: "삭제하기",
         onConfirm: () => deleteSchedule(targetId)
       });
