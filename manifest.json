@@ -1,0 +1,24 @@
+{
+  "name": "강쥐 & 승이 스케줄러",
+  "short_name": "강쥐&승이",
+  "description": "강쥐와 승이의 소중한 주간 일정 & 케어 스케줄러 💕",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "background_color": "#FFF9FA",
+  "theme_color": "#FFF9FA",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

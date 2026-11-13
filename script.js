@@ -7,9 +7,11 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 /**
- * [실시간 동기화 설정]
+ * [실시간 동기화 & 동시 접속 감지 설정]
  * Firebase 프로젝트 키를 입력하면 강쥐 & 승이 두 사람의 스마트폰(PWA)/PC에서
- * 애칭, 개인 스케줄, 생리 주기 설정이 즉시 실시간 반영됩니다.
+ * 1) 네트워크 미연결 시: '로컬 모드'
+ * 2) 1명만 접속 중일 때: '혼자 접속 중...'
+ * 3) 2명 모두 접속 중일 때: '둘 다 접속 중!!!' 으로 실시간 전환됩니다.
  */
 const firebaseConfig = {
   apiKey: "",
@@ -23,6 +25,8 @@ const firebaseConfig = {
 const START_HOUR = 9;
 const END_HOUR = 22;
 const SHORT_DAYS = ["월", "화", "수", "목", "금", "토", "일"];
+const PRESENCE_TIMEOUT_MS = 35000; // 35초 동안 응답 없으면 접속 종료로 간주
+const HEARTBEAT_INTERVAL_MS = 15000; // 15초마다 접속 유지 신호 전송
 
 function getHourHeight() {
   return window.innerWidth >= 960 ? 50 : 44;
@@ -33,6 +37,19 @@ function getDefaultLastPeriodDate() {
   d.setDate(d.getDate() - 14);
   return formatDateYMD(d);
 }
+
+// 현재 브라우저 탭/앱의 고유 세션 ID (새로고침 시 중복 카운트 방지)
+function getOrCreateSessionId() {
+  const key = "couple_session_id_v1";
+  let sid = sessionStorage.getItem(key);
+  if (!sid) {
+    sid = "sess_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
+    sessionStorage.setItem(key, sid);
+  }
+  return sid;
+}
+
+const SESSION_ID = getOrCreateSessionId();
 
 // 애플리케이션 상태 (A: 강쥐, B: 승이 통일)
 let state = {
@@ -53,10 +70,15 @@ let showDerivedFreeTime = true;
 let currentWeekOffset = 0;
 let calYear = new Date().getFullYear();
 let calMonth = new Date().getMonth();
+let pendingConfirmAction = null;
 
 let db = null;
 let sharedDocRef = null;
-const LOCAL_STORAGE_KEY = "gangjwi_seungyi_schedule_v4";
+let presenceDocRef = null;
+let latestPresenceMap = {};
+let isFirebaseConnected = false;
+
+const LOCAL_STORAGE_KEY = "gangjwi_seungyi_schedule_v5";
 
 // 공통 DOM (모든 페이지에 존재)
 const btnOpenDrawer = document.getElementById("btn-open-drawer");
@@ -68,11 +90,17 @@ const btnDrawerNickname = document.getElementById("btn-drawer-nickname");
 const syncStatusEl = document.getElementById("sync-status");
 const syncTextEl = document.getElementById("sync-text");
 const nicknameModal = document.getElementById("nickname-modal");
-const btnOpenNickname = document.getElementById("btn-open-nickname");
 const btnCloseModal = document.getElementById("btn-close-modal");
 const btnSaveNickname = document.getElementById("btn-save-nickname");
 const inputNameA = document.getElementById("input-name-a");
 const inputNameB = document.getElementById("input-name-b");
+
+// 커스텀 확인 모달 DOM
+const confirmModal = document.getElementById("confirm-modal");
+const confirmModalTitle = document.getElementById("confirm-modal-title");
+const confirmModalDesc = document.getElementById("confirm-modal-desc");
+const btnConfirmCancel = document.getElementById("btn-confirm-cancel");
+const btnConfirmOk = document.getElementById("btn-confirm-ok");
 
 // 스케줄러 전용 DOM (index.html에만 존재)
 const isSchedulerPage = Boolean(document.getElementById("timetable"));
@@ -85,6 +113,8 @@ const startTimeSelect = document.getElementById("start-time");
 const endTimeSelect = document.getElementById("end-time");
 const locationInput = document.getElementById("location-input");
 const scheduleForm = document.getElementById("schedule-form");
+const btnAddFixed = document.getElementById("btn-add-fixed");
+const btnAddThisWeek = document.getElementById("btn-add-this-week");
 const formError = document.getElementById("form-error");
 const ttHeaderRowEl = document.getElementById("tt-header-row");
 const ttCycleRowEl = document.getElementById("tt-cycle-row");
@@ -130,31 +160,25 @@ function init() {
   renderAll();
 }
 
-// 햄버거 메뉴 & 애칭 모달 등 모든 페이지 공통 이벤트
+// 햄버거 메뉴, 애칭 모달, 커스텀 확인 모달 이벤트
 function bindCommonEvents() {
-  if (btnOpenDrawer) {
-    btnOpenDrawer.addEventListener("click", openDrawer);
-  }
-  if (btnCloseDrawer) {
-    btnCloseDrawer.addEventListener("click", closeDrawer);
-  }
-  if (drawerBackdrop) {
-    drawerBackdrop.addEventListener("click", closeDrawer);
-  }
+  if (btnOpenDrawer) btnOpenDrawer.addEventListener("click", openDrawer);
+  if (btnCloseDrawer) btnCloseDrawer.addEventListener("click", closeDrawer);
+  if (drawerBackdrop) drawerBackdrop.addEventListener("click", closeDrawer);
+
   if (btnDrawerNickname) {
     btnDrawerNickname.addEventListener("click", () => {
       closeDrawer();
       openNicknameModal();
     });
   }
-  if (btnOpenNickname) {
-    btnOpenNickname.addEventListener("click", openNicknameModal);
-  }
+
   if (btnCloseModal) {
     btnCloseModal.addEventListener("click", () => {
       nicknameModal.classList.add("hidden");
     });
   }
+
   if (btnSaveNickname) {
     btnSaveNickname.addEventListener("click", () => {
       const nameA = inputNameA.value.trim() || "강쥐";
@@ -166,11 +190,146 @@ function bindCommonEvents() {
     });
   }
 
+  if (btnConfirmCancel) {
+    btnConfirmCancel.addEventListener("click", closeConfirmModal);
+  }
+  if (btnConfirmOk) {
+    btnConfirmOk.addEventListener("click", () => {
+      const action = pendingConfirmAction;
+      closeConfirmModal();
+      if (typeof action === "function") {
+        action();
+      }
+    });
+  }
+
+  // 브라우저 온라인/오프라인 상태 변경 감지
+  window.addEventListener("online", () => {
+    sendPresenceHeartbeat(true);
+    updateSyncBadgeUI();
+  });
+  window.addEventListener("offline", () => {
+    updateSyncBadgeUI();
+  });
+
   window.addEventListener("resize", () => {
     if (isSchedulerPage) {
       renderTimetable(getWeekDates(currentWeekOffset));
     }
   });
+}
+
+// ==========================================
+// 3단계 접속 상태 배너 ('로컬 모드' / '혼자 접속 중...' / '둘 다 접속 중!!!')
+// ==========================================
+function updateSyncBadgeUI() {
+  if (!syncStatusEl || !syncTextEl) return;
+
+  syncStatusEl.classList.remove("mode-local", "mode-alone", "mode-both");
+
+  // 1) 인터넷 연결이 끊겼거나 Firebase가 연결되지 않은 경우 -> '로컬 모드'
+  if (!navigator.onLine || !isFirebaseConnected) {
+    syncStatusEl.classList.add("mode-local");
+    syncTextEl.textContent = "로컬 모드";
+    return;
+  }
+
+  // 2) 현재 활성 세션(최근 35초 이내 신호가 있는 접속자) 수 계산
+  const now = Date.now();
+  const activeSessions = Object.entries(latestPresenceMap).filter(
+    ([, lastSeen]) => typeof lastSeen === "number" && now - lastSeen < PRESENCE_TIMEOUT_MS
+  );
+
+  // 본인 세션이 아직 스냅샷에 반영되기 전이라도 최소 1명으로 취급
+  const activeCount = Math.max(1, activeSessions.length);
+
+  if (activeCount >= 2) {
+    syncStatusEl.classList.add("mode-both");
+    syncTextEl.textContent = "둘 다 접속 중!!!";
+  } else {
+    syncStatusEl.classList.add("mode-alone");
+    syncTextEl.textContent = "혼자 접속 중...";
+  }
+}
+
+async function sendPresenceHeartbeat(isActive = true) {
+  if (!presenceDocRef || !navigator.onLine) return;
+
+  try {
+    await setDoc(
+      presenceDocRef,
+      {
+        sessions: {
+          [SESSION_ID]: isActive ? Date.now() : 0
+        }
+      },
+      { merge: true }
+    );
+  } catch (err) {
+    console.error("접속 상태 업데이트 실패:", err);
+  }
+}
+
+function initPresenceTracking() {
+  if (!db) return;
+  presenceDocRef = doc(db, "couple_space", "presence_v1");
+
+  // 실시간으로 상대방 접속/이탈 감지
+  onSnapshot(
+    presenceDocRef,
+    (snapshot) => {
+      isFirebaseConnected = true;
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        latestPresenceMap = data.sessions || {};
+      }
+      updateSyncBadgeUI();
+    },
+    () => {
+      isFirebaseConnected = false;
+      updateSyncBadgeUI();
+    }
+  );
+
+  // 최초 접속 신호 전송
+  sendPresenceHeartbeat(true);
+
+  // 15초마다 하트비트 전송 & 만료된 세션 UI 갱신
+  setInterval(() => {
+    if (document.visibilityState === "visible") {
+      sendPresenceHeartbeat(true);
+    }
+    updateSyncBadgeUI();
+  }, HEARTBEAT_INTERVAL_MS);
+
+  // 앱 화면 전환(백그라운드/포그라운드) 시 즉시 반영
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      sendPresenceHeartbeat(true);
+    } else {
+      sendPresenceHeartbeat(false);
+    }
+  });
+
+  // 창 닫기 / 앱 종료 시 즉시 오프라인 처리
+  window.addEventListener("pagehide", () => {
+    sendPresenceHeartbeat(false);
+  });
+}
+
+function openConfirmModal({ title, desc, okText = "확인", onConfirm }) {
+  if (!confirmModal) return;
+  confirmModalTitle.textContent = title;
+  confirmModalDesc.textContent = desc;
+  btnConfirmOk.textContent = okText;
+  pendingConfirmAction = onConfirm;
+  confirmModal.classList.remove("hidden");
+}
+
+function closeConfirmModal() {
+  if (!confirmModal) return;
+  confirmModal.classList.add("hidden");
+  pendingConfirmAction = null;
 }
 
 function openDrawer() {
@@ -227,30 +386,41 @@ function initDataSync() {
     try {
       const app = initializeApp(firebaseConfig);
       db = getFirestore(app);
-      sharedDocRef = doc(db, "couple_space", "weekly_schedule_v4");
+      sharedDocRef = doc(db, "couple_space", "weekly_schedule_v5");
 
-      onSnapshot(sharedDocRef, (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.data();
-          state.profiles = data.profiles || { A: "강쥐", B: "승이" };
-          state.schedules = data.schedules || [];
-          if (data.cycleConfig) {
-            state.cycleConfig = data.cycleConfig;
-            if (isSchedulerPage) syncCycleFormInputs();
+      onSnapshot(
+        sharedDocRef,
+        (snapshot) => {
+          isFirebaseConnected = true;
+          updateSyncBadgeUI();
+          if (snapshot.exists()) {
+            const data = snapshot.data();
+            state.profiles = data.profiles || { A: "강쥐", B: "승이" };
+            state.schedules = data.schedules || [];
+            if (data.cycleConfig) {
+              state.cycleConfig = data.cycleConfig;
+              if (isSchedulerPage) syncCycleFormInputs();
+            }
+            renderAll();
           }
-          renderAll();
+        },
+        () => {
+          isFirebaseConnected = false;
+          updateSyncBadgeUI();
         }
-      });
+      );
 
-      if (syncStatusEl && syncTextEl) {
-        syncStatusEl.classList.add("online");
-        syncTextEl.textContent = "실시간 연동";
-      }
+      // 실시간 동시 접속자 추적 시작
+      initPresenceTracking();
       return;
     } catch (err) {
       console.error("Firebase 연결 실패, 로컬 모드로 전환합니다:", err);
     }
   }
+
+  // Firebase 미설정 시 로컬 모드 배지 표시
+  isFirebaseConnected = false;
+  updateSyncBadgeUI();
 
   const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
   if (saved) {
@@ -290,7 +460,7 @@ async function saveData() {
 
   localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload));
 
-  if (sharedDocRef) {
+  if (sharedDocRef && navigator.onLine) {
     try {
       await setDoc(sharedDocRef, payload);
     } catch (err) {
@@ -300,7 +470,6 @@ async function saveData() {
 }
 
 function bindSchedulerEvents() {
-  // 모바일에서 '+ 개인 스케줄 등록하기' 접기/펼치기
   btnMobileFormToggle.addEventListener("click", () => {
     const isOpen = scheduleFormCard.classList.toggle("open");
     btnMobileFormToggle.textContent = isOpen
@@ -311,9 +480,21 @@ function bindSchedulerEvents() {
   selectUserABtn.addEventListener("click", () => setSelectedUser("A"));
   selectUserBBtn.addEventListener("click", () => setSelectedUser("B"));
 
+  locationInput.addEventListener("input", () => {
+    formError.classList.add("hidden");
+  });
+
   scheduleForm.addEventListener("submit", (e) => {
     e.preventDefault();
-    handleAddSchedule();
+    handleAddSchedule("fixed");
+  });
+
+  btnAddFixed.addEventListener("click", () => {
+    handleAddSchedule("fixed");
+  });
+
+  btnAddThisWeek.addEventListener("click", () => {
+    handleAddSchedule("this_week");
   });
 
   btnToggleCycleConfig.addEventListener("click", () => {
@@ -386,11 +567,16 @@ function bindSchedulerEvents() {
   });
 
   btnClearAll.addEventListener("click", () => {
-    if (confirm("등록된 모든 개인 스케줄을 초기화할까요?")) {
-      state.schedules = [];
-      saveData();
-      renderAll();
-    }
+    openConfirmModal({
+      title: "시간표 전체 초기화",
+      desc: "고정 시간표와 이번 주 일정을 모두 초기화할까요?",
+      okText: "전체 초기화",
+      onConfirm: () => {
+        state.schedules = [];
+        saveData();
+        renderAll();
+      }
+    });
   });
 }
 
@@ -442,6 +628,11 @@ function getWeekDates(weekOffset = 0) {
     days.push(addDays(monday, i));
   }
   return days;
+}
+
+function getRealTimeThisWeekKey() {
+  const thisWeekMonday = getWeekDates(0)[0];
+  return formatDateYMD(thisWeekMonday);
 }
 
 function getCycleStatusForDate(targetDate) {
@@ -529,7 +720,7 @@ function getUpcomingCycles(count = 6) {
 }
 
 // ==========================================
-// 개인 스케줄 기반 -> 빈 공강 도출 로직
+// 고정 스케줄 & 이번 주 스케줄 등록/필터링 로직
 // ==========================================
 function timeToMinutes(timeStr) {
   const [h, m] = timeStr.split(":").map(Number);
@@ -542,7 +733,7 @@ function minutesToTime(mins) {
   return `${h}:${m}`;
 }
 
-function handleAddSchedule() {
+function handleAddSchedule(mode = "fixed") {
   formError.classList.add("hidden");
 
   const day = Number(daySelect.value);
@@ -550,11 +741,20 @@ function handleAddSchedule() {
   const end = endTimeSelect.value;
   const location = locationInput.value.trim();
 
+  if (!location) {
+    formError.textContent = "일정이나 머무르는 장소를 입력해 주세요!";
+    formError.classList.remove("hidden");
+    locationInput.focus();
+    return;
+  }
+
   if (timeToMinutes(start) >= timeToMinutes(end)) {
     formError.textContent = "마감 시간은 시작 시간보다 뒤여야 합니다.";
     formError.classList.remove("hidden");
     return;
   }
+
+  const weekKey = mode === "this_week" ? getRealTimeThisWeekKey() : null;
 
   const newEntry = {
     id: "sch_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
@@ -562,13 +762,17 @@ function handleAddSchedule() {
     day,
     start,
     end,
-    location
+    location,
+    weekKey
   };
 
   state.schedules.push(newEntry);
   locationInput.value = "";
 
-  // 모바일에서는 추가 완료 후 바로 시간표가 보이도록 폼 접기
+  if (mode === "this_week" && currentWeekOffset !== 0) {
+    currentWeekOffset = 0;
+  }
+
   if (window.innerWidth < 960) {
     scheduleFormCard.classList.remove("open");
     btnMobileFormToggle.textContent = "+ 개인 스케줄 등록하기 ▾";
@@ -584,8 +788,14 @@ function deleteSchedule(id) {
   renderAll();
 }
 
-function deriveFreeSlotsForDay(day) {
-  const daySchedules = state.schedules.filter((s) => s.day === day);
+function getSchedulesForWeek(day, viewedWeekKey) {
+  return state.schedules.filter(
+    (s) => s.day === day && (!s.weekKey || s.weekKey === viewedWeekKey)
+  );
+}
+
+function deriveFreeSlotsForDay(day, viewedWeekKey) {
+  const daySchedules = getSchedulesForWeek(day, viewedWeekKey);
   if (daySchedules.length === 0) return [];
 
   const dayStartMin = START_HOUR * 60;
@@ -767,7 +977,10 @@ function renderTimetable(weekDates) {
   const hourHeight = getHourHeight();
   const startLabel = formatShortMD(weekDates[0]);
   const endLabel = formatShortMD(weekDates[6]);
-  currentWeekLabel.textContent = `${startLabel}~${endLabel}`;
+  const viewedWeekKey = formatDateYMD(weekDates[0]);
+
+  currentWeekLabel.textContent =
+    currentWeekOffset === 0 ? `이번 주 (${startLabel}~${endLabel})` : `${startLabel}~${endLabel}`;
 
   // 1) 요일 + 날짜 헤더
   let headerHtml = `<div class="tt-time-col-header">시간</div>`;
@@ -815,8 +1028,10 @@ function renderTimetable(weekDates) {
 
   let daysHtml = "";
   for (let day = 0; day < 7; day++) {
-    const daySchedules = state.schedules.filter((s) => s.day === day);
-    const derivedFreeSlots = showDerivedFreeTime ? deriveFreeSlotsForDay(day) : [];
+    const daySchedules = getSchedulesForWeek(day, viewedWeekKey);
+    const derivedFreeSlots = showDerivedFreeTime
+      ? deriveFreeSlotsForDay(day, viewedWeekKey)
+      : [];
 
     const freeHtml = derivedFreeSlots
       .map((slot) => {
@@ -841,15 +1056,16 @@ function renderTimetable(weekDates) {
         const heightPx = (durationMin / 60) * hourHeight;
         const userName = item.user === "A" ? state.profiles.A : state.profiles.B;
         const blockClass = item.user === "A" ? "block-a" : "block-b";
+        const onceClass = item.weekKey ? "block-once" : "";
+        const badgePrefix = item.weekKey ? "✨" : "📌";
 
         return `
           <div
-            class="tt-block ${blockClass}"
+            class="tt-block ${blockClass} ${onceClass}"
             style="top:${topPx}px; height:${heightPx}px;"
             data-id="${item.id}"
-            title="터치하여 삭제 (${userName}: ${item.start}~${item.end})"
           >
-            <div class="block-title">${escapeHtml(userName)}</div>
+            <div class="block-title">${badgePrefix}${escapeHtml(userName)}</div>
             <div class="block-place">${escapeHtml(item.location)}</div>
           </div>
         `;
@@ -863,9 +1079,19 @@ function renderTimetable(weekDates) {
 
   timetableBodyEl.querySelectorAll(".tt-block").forEach((block) => {
     block.addEventListener("click", () => {
-      if (confirm("선택한 개인 일정을 삭제할까요?")) {
-        deleteSchedule(block.dataset.id);
-      }
+      const targetId = block.dataset.id;
+      const targetItem = state.schedules.find((s) => s.id === targetId);
+      if (!targetItem) return;
+
+      const userName = targetItem.user === "A" ? state.profiles.A : state.profiles.B;
+      const typeLabel = targetItem.weekKey ? "이번 주만 등록된 일정" : "매주 고정 일정";
+
+      openConfirmModal({
+        title: "스케줄 삭제",
+        desc: `[${userName}] ${SHORT_DAYS[targetItem.day]}요일 ${targetItem.start}~${targetItem.end} (${targetItem.location} · ${typeLabel})을 삭제할까요?`,
+        okText: "삭제하기",
+        onConfirm: () => deleteSchedule(targetId)
+      });
     });
   });
 }
@@ -877,3 +1103,46 @@ function escapeHtml(str) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
+
+// PWA 서비스워커 등록 실행
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("./sw.js")
+      .then((reg) => console.log("서비스 워커 등록 완료!", reg.scope))
+      .catch((err) => console.error("서비스 워커 등록 실패:", err));
+  });
+}
+
+// iOS 환경 및 웹앱(standalone) 접속 여부 판별하여 추가 안내창 보이기
+document.addEventListener("DOMContentLoaded", () => {
+  const pwaToast = document.getElementById("ios-pwa-toast");
+  const btnClosePwa = document.getElementById("btn-close-pwa-toast");
+
+  if (!pwaToast) return;
+
+  // iOS 여부 판단 (아이폰, 아이패드, 아이팟)
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  
+  // 독립 실행형(Standalone, 즉 홈 화면에서 켠 경우) 여부 판단
+  const isStandalone = window.navigator.standalone === true || window.matchMedia("(display-mode: standalone)").matches;
+
+  // 사용자가 수동으로 닫았었는지 체크 (하루 동안 보이지 않기 위함)
+  const isToastDismissed = localStorage.getItem("ios-pwa-dismissed") === "true";
+
+  // 1) iOS 기기이면서, 2) 홈 화면 앱이 아닌 웹 브라우저로 켰을 때, 3) 사용자가 닫은 적이 없을 때만 팝업 노출
+  if (isIOS && !isStandalone && !isToastDismissed) {
+    // 로딩 후 2.5초 뒤 자연스럽게 띄움
+    setTimeout(() => {
+      pwaToast.classList.remove("hidden");
+    }, 2500);
+  }
+
+  if (btnClosePwa) {
+    btnClosePwa.addEventListener("click", () => {
+      pwaToast.classList.add("hidden");
+      // 한 번 닫으면 7일 동안 이 기기에서 띄우지 않도록 기록
+      localStorage.setItem("ios-pwa-dismissed", "true");
+    });
+  }
+});
