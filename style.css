@@ -6,20 +6,20 @@
   --burgundy: rgb(128, 0, 32);           /* #800020 */
   --burgundy-dark: #5C0016;
 
-  /* 생리 주기 상태별 서브 컬러 */
-  --period-bg: #FFE0E5;
+  /* 생리 주기 상태별 컬러 */
+  --period-bg: #FAD2D8;
   --period-border: #800020;
   --period-text: #800020;
 
-  --fertile-bg: #F3E8FF;
+  --fertile-bg: #E9D5FF;
   --fertile-border: #7E22CE;
   --fertile-text: #6B21A8;
 
-  --ovulation-bg: #FCE7F3;
+  --ovulation-bg: #FBCFE8;
   --ovulation-border: #BE185D;
   --ovulation-text: #9D174D;
 
-  --pms-bg: #FEF3C7;
+  --pms-bg: #FDE68A;
   --pms-border: #B45309;
   --pms-text: #92400E;
 
@@ -30,7 +30,7 @@
   --text-muted: #7D5A62;
   --border-color: #F2D6D8;
 
-  /* 시간표 설정 (모바일 기준 44px, PC에서 50px로 확장) */
+  /* 시간표 설정 */
   --hour-height: 44px;
   --radius-lg: 18px;
   --radius-md: 12px;
@@ -42,6 +42,12 @@
   margin: 0;
   padding: 0;
   -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  /* 갤럭시 크롬/삼성 인터넷에서 스크롤 시 의도치 않은 당김 새로고침 방지 */
+  overscroll-behavior-y: contain;
 }
 
 body {
@@ -65,7 +71,8 @@ body {
 }
 
 /* ==========================================
-   좌측 슬라이드 네비게이션 드로어 (햄버거 메뉴)
+   좌측 슬라이드 네비게이션 드로어
+   (닫기 버튼을 햄버거 버튼과 동일한 좌측 상단 위치에 고정)
 ========================================== */
 .drawer-backdrop {
   position: fixed;
@@ -80,7 +87,7 @@ body {
   top: 0;
   left: 0;
   bottom: 0;
-  width: 280px;
+  width: 270px;
   max-width: 82vw;
   background: #FFFFFF;
   border-right: 2px solid var(--blush-pink);
@@ -88,9 +95,10 @@ body {
   z-index: 100;
   display: flex;
   flex-direction: column;
-  padding: calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom));
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: calc(18px + env(safe-area-inset-bottom));
   transform: translateX(-105%);
-  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .nav-drawer.open {
@@ -100,9 +108,31 @@ body {
 .drawer-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding-bottom: 16px;
-  border-bottom: 1.5px solid var(--border-color);
+  gap: 10px;
+  height: 58px;
+  padding: 0 14px;
+  border-bottom: 2px solid var(--blush-pink);
+  flex-shrink: 0;
+}
+
+.btn-icon-close {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  border: 1.5px solid var(--blush-pink);
+  background: var(--blush-pink-light);
+  color: var(--burgundy);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.btn-icon-close:active {
+  background: var(--blush-pink);
 }
 
 .drawer-couple-tag {
@@ -111,24 +141,12 @@ body {
   color: var(--burgundy);
 }
 
-.btn-icon-close {
-  background: var(--blush-pink-light);
-  border: 1px solid var(--border-color);
-  color: var(--burgundy);
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  font-size: 15px;
-  font-weight: 800;
-  cursor: pointer;
-}
-
 .drawer-nav {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-top: 16px;
+  padding: 16px 14px;
   overflow-y: auto;
 }
 
@@ -142,7 +160,6 @@ body {
 .drawer-link {
   display: flex;
   align-items: center;
-  gap: 10px;
   padding: 12px 14px;
   border-radius: 12px;
   text-decoration: none;
@@ -161,12 +178,8 @@ body {
   color: #FFFFFF;
 }
 
-.drawer-link-icon {
-  font-size: 17px;
-}
-
 .drawer-footer {
-  padding-top: 14px;
+  padding: 14px 14px 0;
   border-top: 1.5px solid var(--border-color);
 }
 
@@ -237,7 +250,6 @@ body {
   gap: 6px;
 }
 
-/* 3단계 접속 상태 배너 스타일 */
 .sync-badge {
   display: inline-flex;
   align-items: center;
@@ -257,7 +269,6 @@ body {
   flex-shrink: 0;
 }
 
-/* 1단계: 로컬 모드 (네트워크 미연결) */
 .sync-badge.mode-local {
   color: var(--text-muted);
   background: var(--blush-pink-light);
@@ -268,7 +279,6 @@ body {
   background: #F59E0B;
 }
 
-/* 2단계: 혼자 접속 중... (네트워크 연결됨, 1명 접속) */
 .sync-badge.mode-alone {
   color: var(--burgundy);
   background: #FFFFFF;
@@ -280,7 +290,6 @@ body {
   box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
 }
 
-/* 3단계: 둘 다 접속 중!!! (네트워크 연결됨, 2명 동시 접속) */
 .sync-badge.mode-both {
   color: #FFFFFF;
   background: var(--burgundy);
@@ -348,7 +357,6 @@ body {
   gap: 14px;
 }
 
-/* 공통 카드 */
 .card {
   background: var(--bg-card);
   border: 1.5px solid var(--border-color);
@@ -467,9 +475,7 @@ input:focus {
   border: 2px solid var(--blush-pink);
 }
 
-/* ==========================================
-   고정 시간표 등록 & 이번 주에만 등록 버튼 그룹
-========================================== */
+/* 고정 시간표 등록 & 이번 주에만 등록 버튼 */
 .submit-btn-group {
   display: flex;
   flex-direction: column;
@@ -581,7 +587,7 @@ input:focus {
 }
 
 /* ==========================================
-   생리 주기 주간 케어 & 숨김 설정/더보기
+   금주의 강쥐지직 카드 & 숨김 설정/더보기
 ========================================== */
 .cycle-weekly-card {
   background: linear-gradient(135deg, #FFF7F8 0%, #FFFFFF 100%);
@@ -603,15 +609,6 @@ input:focus {
   gap: 6px;
   margin-bottom: 4px;
   flex-wrap: wrap;
-}
-
-.cycle-tag {
-  font-size: 10px;
-  font-weight: 800;
-  color: #FFFFFF;
-  background: var(--burgundy);
-  padding: 2px 7px;
-  border-radius: 99px;
 }
 
 .cycle-dday-pill {
@@ -684,7 +681,7 @@ input:focus {
 
 .weekly-cycle-issues {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
   gap: 8px;
 }
 
@@ -806,7 +803,6 @@ input:focus {
 .cal-day {
   aspect-ratio: 1;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   border-radius: 8px;
@@ -821,11 +817,6 @@ input:focus {
 .cal-day.type-fertile { background: var(--fertile-bg); color: var(--fertile-text); }
 .cal-day.type-ovulation { background: var(--ovulation-bg); color: var(--ovulation-text); border: 1.5px solid var(--ovulation-border); font-weight: 800; }
 .cal-day.type-pms { background: var(--pms-bg); color: var(--pms-text); }
-
-.cal-day-icon {
-  font-size: 8px;
-  line-height: 1;
-}
 
 .cal-legend {
   display: flex;
@@ -844,10 +835,10 @@ input:focus {
   margin-right: 3px;
 }
 
-.lg-period { background: var(--burgundy); }
-.lg-fertile { background: #9333EA; }
-.lg-ovulation { background: #DB2777; }
-.lg-pms { background: #D97706; }
+.lg-period { background: var(--period-bg); border: 1px solid var(--period-border); }
+.lg-fertile { background: var(--fertile-bg); border: 1px solid var(--fertile-border); }
+.lg-ovulation { background: var(--ovulation-bg); border: 1px solid var(--ovulation-border); }
+.lg-pms { background: var(--pms-bg); border: 1px solid var(--pms-border); }
 
 .upcoming-cycles-box h3 {
   font-size: 14.5px;
@@ -896,15 +887,31 @@ input:focus {
 }
 
 /* ==========================================
-   모바일 퍼스트 주간 시간표
+   주간 스케줄 & 상단 버튼/색상 범례
 ========================================== */
 .timetable-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 10px;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.timetable-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 220px;
+}
+
+.timetable-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .timetable-header h2 {
@@ -916,6 +923,25 @@ input:focus {
 .timetable-header p {
   font-size: 11.5px;
   color: var(--text-muted);
+}
+
+.btn-free-toggle {
+  background: #FFFFFF;
+  color: var(--text-muted);
+  border: 1.5px solid var(--border-color);
+  border-radius: 99px;
+  padding: 4px 11px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-free-toggle.active {
+  background: var(--blush-pink-soft);
+  color: var(--burgundy);
+  border-color: var(--burgundy);
 }
 
 .week-nav {
@@ -953,16 +979,21 @@ input:focus {
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 8px 12px;
   margin-bottom: 10px;
+  padding: 8px 10px;
+  background: var(--bg-page);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
 }
 
 .legend {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 700;
+  color: var(--text-main);
 }
 
 .legend-item {
@@ -982,23 +1013,10 @@ input:focus {
 .box-b { background: rgba(128, 0, 32, 0.85); }
 .box-free { background: rgba(244, 194, 194, 0.3); border: 1.5px dashed var(--burgundy); }
 
-.btn-free-toggle {
-  background: #FFFFFF;
-  color: var(--text-muted);
-  border: 1.5px solid var(--border-color);
-  border-radius: 99px;
-  padding: 4px 10px;
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.btn-free-toggle.active {
-  background: var(--blush-pink-soft);
-  color: var(--burgundy);
-  border-color: var(--burgundy);
-}
+.box-period { background: var(--period-bg); border: 1.5px solid var(--period-border); }
+.box-fertile { background: var(--fertile-bg); border: 1.5px solid var(--fertile-border); }
+.box-ovulation { background: var(--ovulation-bg); border: 1.5px solid var(--ovulation-border); }
+.box-pms { background: var(--pms-bg); border: 1.5px solid var(--pms-border); }
 
 .timetable-scroll {
   width: 100%;
@@ -1044,6 +1062,7 @@ input:focus {
   color: var(--text-muted);
 }
 
+/* 텍스트 없이 색상만으로 정보를 주는 주간 케어 행 */
 .tt-cycle-row {
   background: #FFF9FA;
   border-bottom: 1.5px solid var(--border-color);
@@ -1062,37 +1081,41 @@ input:focus {
 }
 
 .tt-cycle-cell {
-  padding: 3px 2px;
+  padding: 4px 3px;
   border-right: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 28px;
+  min-height: 18px;
 }
 
 .tt-cycle-cell:last-child { border-right: none; }
 
-.tt-cycle-badge {
-  display: inline-block;
+.tt-cycle-bar {
+  display: block;
   width: 100%;
-  text-align: center;
-  font-size: 9.5px;
-  font-weight: 800;
-  padding: 2px 1px;
-  border-radius: 5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  height: 10px;
+  border-radius: 4px;
 }
 
-.tt-cycle-badge.type-period { background: var(--period-bg); color: var(--period-text); border: 1px solid var(--period-border); }
-.tt-cycle-badge.type-fertile { background: var(--fertile-bg); color: var(--fertile-text); border: 1px solid var(--fertile-border); }
-.tt-cycle-badge.type-ovulation { background: var(--ovulation-bg); color: var(--ovulation-text); border: 1px solid var(--ovulation-border); }
-.tt-cycle-badge.type-pms { background: var(--pms-bg); color: var(--pms-text); border: 1px solid var(--pms-border); }
+.tt-cycle-bar.type-period {
+  background: var(--period-bg);
+  border: 1.5px solid var(--period-border);
+}
 
-.tt-cycle-none {
-  font-size: 10px;
-  color: #D5B8BE;
+.tt-cycle-bar.type-fertile {
+  background: var(--fertile-bg);
+  border: 1.5px solid var(--fertile-border);
+}
+
+.tt-cycle-bar.type-ovulation {
+  background: var(--ovulation-bg);
+  border: 1.5px solid var(--ovulation-border);
+}
+
+.tt-cycle-bar.type-pms {
+  background: var(--pms-bg);
+  border: 1.5px solid var(--pms-border);
 }
 
 .tt-time-col {
@@ -1150,7 +1173,6 @@ input:focus {
   border: 1.5px solid var(--burgundy);
 }
 
-/* '이번 주에만 등록'된 일회성 스케줄은 점선 테두리로 구분 */
 .tt-block.block-once {
   border-style: dashed;
 }
@@ -1206,16 +1228,11 @@ input:focus {
   line-height: 1.1;
 }
 
-/* 서브 서비스 페이지 공통 플레이스홀더 카드 */
+/* 서브 서비스 페이지 공통 플레이스홀더 */
 .service-placeholder-card {
   text-align: center;
   padding: 48px 20px;
   margin-top: 20px;
-}
-
-.service-placeholder-icon {
-  font-size: 42px;
-  margin-bottom: 12px;
 }
 
 .service-placeholder-card h2 {
@@ -1275,6 +1292,85 @@ input:focus {
   margin-top: 4px;
 }
 
+/* 갤럭시 & iOS 공용 PWA 홈화면 설치 유도 토스트 팝업 */
+.pwa-toast {
+  position: fixed;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  left: 14px;
+  right: 14px;
+  background: rgba(255, 255, 255, 0.98);
+  border: 2px solid var(--blush-pink);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 10px 30px rgba(128, 0, 32, 0.18);
+  padding: 16px;
+  z-index: 999;
+  animation: slide-up-pwa 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.pwa-toast-content {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  position: relative;
+}
+
+.pwa-toast-text {
+  flex: 1;
+}
+
+.pwa-toast-text h4 {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--burgundy);
+  margin-bottom: 3px;
+}
+
+.pwa-toast-text p {
+  font-size: 12px;
+  color: var(--text-main);
+  line-height: 1.5;
+}
+
+/* 갤럭시 원클릭 설치 버튼 */
+.btn-pwa-install {
+  margin-top: 10px;
+  width: 100%;
+  padding: 9px 14px;
+  font-size: 13px;
+  border-radius: 10px;
+}
+
+.ios-share-badge {
+  display: inline-block;
+  background: var(--blush-pink-light);
+  border: 1px solid var(--border-color);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+.pwa-toast-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+@keyframes slide-up-pwa {
+  from {
+    transform: translateY(120%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
 /* ==========================================
    PC / 태블릿 가로 화면 (960px 이상) 반응형 확장
 ========================================== */
@@ -1284,6 +1380,10 @@ input:focus {
   }
 
   .container {
+    padding: 0 24px;
+  }
+
+  .drawer-header {
     padding: 0 24px;
   }
 
@@ -1340,7 +1440,10 @@ input:focus {
     grid-template-columns: 58px repeat(7, minmax(0, 1fr));
   }
 
-  .tt-cycle-badge,
+  .tt-cycle-bar {
+    height: 12px;
+  }
+
   .tt-block {
     font-size: 11px;
     padding: 4px 6px;
@@ -1349,78 +1452,5 @@ input:focus {
   .block-place,
   .tt-free-badge {
     font-size: 10px;
-  }
-}
-
-/* iOS PWA 홈화면 설치 유도 토스트 팝업 */
-.pwa-toast {
-  position: fixed;
-  bottom: calc(20px + env(safe-area-inset-bottom));
-  left: 14px;
-  right: 14px;
-  background: rgba(255, 255, 255, 0.98);
-  border: 2.5px solid var(--blush-pink);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 10px 30px rgba(128, 0, 32, 0.18);
-  padding: 16px;
-  z-index: 999;
-  animation: slide-up-pwa 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-.pwa-toast-content {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  position: relative;
-}
-
-.pwa-toast-icon {
-  font-size: 26px;
-  line-height: 1;
-}
-
-.pwa-toast-text h4 {
-  font-size: 14px;
-  font-weight: 800;
-  color: var(--burgundy);
-  margin-bottom: 3px;
-}
-
-.pwa-toast-text p {
-  font-size: 11.5px;
-  color: var(--text-main);
-  line-height: 1.5;
-}
-
-.ios-share-badge {
-  display: inline-block;
-  background: var(--blush-pink-light);
-  border: 1px solid var(--border-color);
-  padding: 1px 4px;
-  border-radius: 4px;
-  font-weight: bold;
-}
-
-.pwa-toast-close {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 16px;
-  font-weight: 800;
-  cursor: pointer;
-  padding: 4px;
-  position: absolute;
-  top: -6px;
-  right: -4px;
-}
-
-@keyframes slide-up-pwa {
-  from {
-    transform: translateY(120%);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
   }
 }
