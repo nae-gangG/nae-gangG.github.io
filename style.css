@@ -35,6 +35,9 @@
   --radius-lg: 18px;
   --radius-md: 12px;
   --shadow-soft: 0 6px 20px rgba(128, 0, 32, 0.06);
+
+  color-scheme: light only;
+  forced-color-adjust: none;
 }
 
 * {
