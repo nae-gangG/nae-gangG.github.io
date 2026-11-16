@@ -15,11 +15,64 @@ const firebaseConfig = {
   appId: "1:925867766886:web:aab1ef0a0868287b3fa9a7"
 };
 
+// 일정 마감 시간을 23시까지 확장
 const START_HOUR = 9;
-const END_HOUR = 22;
+const END_HOUR = 23;
 const SHORT_DAYS = ["월", "화", "수", "목", "금", "토", "일"];
 const PRESENCE_TIMEOUT_MS = 35000;
 const HEARTBEAT_INTERVAL_MS = 12000;
+
+// 사이트 패치 노트 기록 (새로운 업데이트마다 맨 위에 추가)
+const PATCH_NOTES = [
+  {
+    version: "v1.3",
+    date: "2026. 11. 16.",
+    title: "'기다림의 노트' 추가",
+    latest: true,
+    items: [
+      "기다리는 시간 측정 및 그림판 기능 추가",
+      "볼펜·형광펜·지우개 도구 및 3단계 굵기, 색상 팔레트, 실행 취소(Undo/Redo) 지원",
+      "그림 완성 시 제목과 기다린 시간 기록 및 새로 그리기 전까지 두 사용자 간 화면 공유",
+      "완성된 그림 이미지 저장 기능 및 누적 저장 횟수 카운팅"
+    ]
+  },
+  {
+    version: "v1.2",
+    date: "2026. 11. 16.",
+    title: "스케줄러 편의성 개선 & 되돌리기(Undo) 추가",
+    latest: true,
+    items: [
+      "일정 마감 시간 선택 범위를 기존 22:00에서 23:00까지 확장",
+      "주간 이동 화살표(◀/▶)로 다른 주로 넘어간 상태에서 '이번 주에만 등록' 클릭 시 해당 주에 일정이 등록되도록 개선",
+      "실수로 등록하거나 삭제한 직전 스케줄을 즉시 복구하는 '↩ 되돌리기(Undo)' 기능 추가 (전체 초기화 제거)",
+      "스케줄 정보 모달의 [삭제하기]·[취소] 버튼 위치 맞교환 및 버튼 간격 확장",
+      "사이드 메뉴 하단 '패치 노트' 열람 창 신설"
+    ]
+  },
+  {
+    version: "v1.1",
+    date: "2026. 11. 15.",
+    title: "모바일 웹앱(PWA) & 미니멀 시간표 리뉴얼",
+    latest: false,
+    items: [
+      "아이폰(iOS) 및 갤럭시(Android) 홈 화면 바로가기 앱 설치 & 라이트 모드 고정 지원",
+      "주간 스케줄 블록을 깔끔한 컬러 전용 블록으로 변경하고 터치 시 상세 '스케줄 정보' 창이 뜨도록 개선",
+      "'예정된 강쥐지직 열람' 접이식 배너 도입 및 새로고침 시에도 접기·펼침 상태가 유지되도록 저장",
+      "3단계 실시간 접속 배너('로컬 모드' / '혼자 접속 중...' / '둘 다 접속 중!!!') 적용"
+    ]
+  },
+  {
+    version: "v1.0",
+    date: "2026. 11. 13.",
+    title: "강쥐랑 승이 주간 스케줄러 오픈",
+    latest: false,
+    items: [
+      "Blush Pink & Burgundy 테마 기반 주간 시간표 및 공통 공강 자동 도출 기능 구현",
+      "고정 시간표 등록 및 일회성 주간 일정 등록 분리",
+      "주기 설정 기반 '금주의 강쥐지직' 및 6주기 예측 캘린더 연동"
+    ]
+  }
+];
 
 function getHourHeight() {
   return window.innerWidth >= 960 ? 50 : 44;
@@ -66,6 +119,9 @@ let uiState = {
   showDerivedFreeTime: true
 };
 
+// 가장 최근 스케줄 작업 1건을 되돌리기(Undo) 위한 스냅샷
+let lastScheduleSnapshot = null;
+
 let currentWeekOffset = 0;
 let calYear = new Date().getFullYear();
 let calMonth = new Date().getMonth();
@@ -88,6 +144,7 @@ const btnCloseDrawer = document.getElementById("btn-close-drawer");
 const navDrawer = document.getElementById("nav-drawer");
 const drawerBackdrop = document.getElementById("drawer-backdrop");
 const btnDrawerNickname = document.getElementById("btn-drawer-nickname");
+const btnDrawerPatchnotes = document.getElementById("btn-drawer-patchnotes");
 
 const syncStatusEl = document.getElementById("sync-status");
 const syncTextEl = document.getElementById("sync-text");
@@ -96,6 +153,11 @@ const btnCloseModal = document.getElementById("btn-close-modal");
 const btnSaveNickname = document.getElementById("btn-save-nickname");
 const inputNameA = document.getElementById("input-name-a");
 const inputNameB = document.getElementById("input-name-b");
+
+// 패치 노트 모달 DOM
+const patchnotesModal = document.getElementById("patchnotes-modal");
+const btnClosePatchnotes = document.getElementById("btn-close-patchnotes");
+const patchnotesListEl = document.getElementById("patchnotes-list");
 
 // 확인/정보 모달 DOM
 const confirmModal = document.getElementById("confirm-modal");
@@ -122,7 +184,7 @@ const ttHeaderRowEl = document.getElementById("tt-header-row");
 const ttCycleRowEl = document.getElementById("tt-cycle-row");
 const timetableBodyEl = document.getElementById("timetable-body");
 const btnToggleFreeView = document.getElementById("btn-toggle-free-view");
-const btnClearAll = document.getElementById("btn-clear-all");
+const btnUndo = document.getElementById("btn-undo");
 
 // 예정된 강쥐지직 열람 접이식 배너 및 내부 DOM
 const btnCycleCardToggle = document.getElementById("btn-cycle-card-toggle");
@@ -154,11 +216,13 @@ init();
 
 function init() {
   loadUiState();
+  renderPatchNotes();
   bindCommonEvents();
   if (isSchedulerPage) {
     populateTimeOptions();
     bindSchedulerEvents();
     applyUiState();
+    updateUndoButtonUI();
   }
   initDataSync();
   if (isSchedulerPage) {
@@ -169,7 +233,7 @@ function init() {
 }
 
 // ==========================================
-// 접기/펼침 UI 상태 저장 및 복원 (새로고침·이벤트 시 유지)
+// 접기/펼침 UI 상태 저장 및 복원
 // ==========================================
 function loadUiState() {
   const saved = localStorage.getItem(UI_STATE_STORAGE_KEY);
@@ -190,7 +254,6 @@ function saveUiState() {
 function applyUiState() {
   if (!isSchedulerPage) return;
 
-  // 1) 개인 스케줄 등록 폼 접기/펼침 상태 반영
   if (scheduleFormCard && btnMobileFormToggle) {
     scheduleFormCard.classList.toggle("open", Boolean(uiState.isScheduleFormOpen));
     btnMobileFormToggle.textContent = uiState.isScheduleFormOpen
@@ -198,7 +261,6 @@ function applyUiState() {
       : "+ 개인 스케줄 등록하기 ▾";
   }
 
-  // 2) 예정된 강쥐지직 열람 카드 접기/펼침 상태 반영
   if (cycleWeeklyCard && btnCycleCardToggle) {
     cycleWeeklyCard.classList.toggle("hidden", !uiState.isCycleCardOpen);
     btnCycleCardToggle.textContent = uiState.isCycleCardOpen
@@ -206,7 +268,6 @@ function applyUiState() {
       : "예정된 강쥐지직 열람 ▾";
   }
 
-  // 3) 주기 설정 패널 접기/펼침 상태 반영
   if (cycleConfigPanel && btnToggleCycleConfig) {
     cycleConfigPanel.classList.toggle("hidden", !uiState.isCycleConfigOpen);
     btnToggleCycleConfig.textContent = uiState.isCycleConfigOpen
@@ -214,7 +275,6 @@ function applyUiState() {
       : "주기 설정";
   }
 
-  // 4) 전체 일정 더보기 패널 접기/펼침 상태 반영
   if (cycleMorePanel && btnToggleCycleMore) {
     cycleMorePanel.classList.toggle("hidden", !uiState.isCycleMoreOpen);
     btnToggleCycleMore.textContent = uiState.isCycleMoreOpen
@@ -222,13 +282,45 @@ function applyUiState() {
       : "전체 일정 더보기 ▾";
   }
 
-  // 5) 공강 표시 켜짐/꺼짐 상태 반영
   if (btnToggleFreeView) {
     btnToggleFreeView.classList.toggle("active", Boolean(uiState.showDerivedFreeTime));
     btnToggleFreeView.textContent = uiState.showDerivedFreeTime
       ? "공강 표시 켜짐"
       : "공강 표시 꺼짐";
   }
+}
+
+// ==========================================
+// 패치 노트 렌더링 및 열람 모달
+// ==========================================
+function renderPatchNotes() {
+  if (!patchnotesListEl) return;
+
+  patchnotesListEl.innerHTML = PATCH_NOTES.map(
+    (note) => `
+      <div class="patch-card ${note.latest ? "latest" : ""}">
+        <div class="patch-card-top">
+          <span class="patch-version">${escapeHtml(note.version)}</span>
+          <span class="patch-date">${escapeHtml(note.date)}</span>
+        </div>
+        <div class="patch-title">${escapeHtml(note.title)}</div>
+        <ul class="patch-items">
+          ${note.items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+        </ul>
+      </div>
+    `
+  ).join("");
+}
+
+function openPatchnotesModal() {
+  if (!patchnotesModal) return;
+  patchnotesModal.classList.remove("hidden");
+  pushOverlayState();
+}
+
+function closePatchnotesModal() {
+  if (!patchnotesModal) return;
+  patchnotesModal.classList.add("hidden");
 }
 
 function bindCommonEvents() {
@@ -240,6 +332,25 @@ function bindCommonEvents() {
     btnDrawerNickname.addEventListener("click", () => {
       closeDrawer();
       openNicknameModal();
+    });
+  }
+
+  if (btnDrawerPatchnotes) {
+    btnDrawerPatchnotes.addEventListener("click", () => {
+      closeDrawer();
+      openPatchnotesModal();
+    });
+  }
+
+  if (btnClosePatchnotes) {
+    btnClosePatchnotes.addEventListener("click", closePatchnotesModal);
+  }
+
+  if (patchnotesModal) {
+    patchnotesModal.addEventListener("click", (e) => {
+      if (e.target === patchnotesModal) {
+        closePatchnotesModal();
+      }
     });
   }
 
@@ -277,6 +388,10 @@ function bindCommonEvents() {
     if (navDrawer && navDrawer.classList.contains("open")) {
       navDrawer.classList.remove("open");
       drawerBackdrop.classList.add("hidden");
+      return;
+    }
+    if (patchnotesModal && !patchnotesModal.classList.contains("hidden")) {
+      closePatchnotesModal();
       return;
     }
     if (nicknameModal && !nicknameModal.classList.contains("hidden")) {
@@ -587,15 +702,35 @@ function syncCycleFormInputs() {
   periodLengthInput.value = state.cycleConfig.periodLength;
 }
 
+// ==========================================
+// 가장 최근 작업 1건 되돌리기 (Undo / Ctrl+Z)
+// ==========================================
+function saveUndoSnapshot() {
+  lastScheduleSnapshot = JSON.parse(JSON.stringify(state.schedules));
+  updateUndoButtonUI();
+}
+
+function updateUndoButtonUI() {
+  if (!btnUndo) return;
+  btnUndo.disabled = !lastScheduleSnapshot;
+}
+
+function handleUndo() {
+  if (!lastScheduleSnapshot) return;
+  state.schedules = lastScheduleSnapshot;
+  lastScheduleSnapshot = null;
+  updateUndoButtonUI();
+  saveData();
+  renderAll();
+}
+
 function bindSchedulerEvents() {
-  // 1) 개인 스케줄 등록창 접기/펼치기 (상태 저장)
   btnMobileFormToggle.addEventListener("click", () => {
     uiState.isScheduleFormOpen = !uiState.isScheduleFormOpen;
     saveUiState();
     applyUiState();
   });
 
-  // 2) 예정된 강쥐지직 열람 카드 접기/펼치기 (상태 저장)
   if (btnCycleCardToggle && cycleWeeklyCard) {
     btnCycleCardToggle.addEventListener("click", () => {
       uiState.isCycleCardOpen = !uiState.isCycleCardOpen;
@@ -624,14 +759,28 @@ function bindSchedulerEvents() {
     handleAddSchedule("this_week");
   });
 
-  // 3) 주기 설정 패널 접기/펼치기 (상태 저장)
+  // 되돌리기 버튼 클릭 이벤트 및 Ctrl+Z / Cmd+Z 단축키 지원
+  if (btnUndo) {
+    btnUndo.addEventListener("click", handleUndo);
+  }
+
+  window.addEventListener("keydown", (e) => {
+    const tag = document.activeElement ? document.activeElement.tagName : "";
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+      if (lastScheduleSnapshot) {
+        e.preventDefault();
+        handleUndo();
+      }
+    }
+  });
+
   btnToggleCycleConfig.addEventListener("click", () => {
     uiState.isCycleConfigOpen = !uiState.isCycleConfigOpen;
     saveUiState();
     applyUiState();
   });
 
-  // 주기 설정 저장 시에도 접기/펼침 상태를 강제로 닫지 않고 유지
   cycleForm.addEventListener("submit", (e) => {
     e.preventDefault();
     const lastStartDate = cycleLastDateInput.value;
@@ -645,14 +794,12 @@ function bindSchedulerEvents() {
     renderAll();
   });
 
-  // 4) 전체 일정 더보기 접기/펼치기 (상태 저장)
   btnToggleCycleMore.addEventListener("click", () => {
     uiState.isCycleMoreOpen = !uiState.isCycleMoreOpen;
     saveUiState();
     applyUiState();
   });
 
-  // 5) 공강 표시 켜짐/꺼짐 (상태 저장)
   btnToggleFreeView.addEventListener("click", () => {
     uiState.showDerivedFreeTime = !uiState.showDerivedFreeTime;
     saveUiState();
@@ -691,19 +838,6 @@ function bindSchedulerEvents() {
   btnNextWeek.addEventListener("click", () => {
     currentWeekOffset++;
     renderAll();
-  });
-
-  btnClearAll.addEventListener("click", () => {
-    openConfirmModal({
-      title: "시간표 전체 초기화",
-      desc: "고정 시간표와 이번 주 일정을 모두 초기화할까요?",
-      okText: "전체 초기화",
-      onConfirm: () => {
-        state.schedules = [];
-        saveData();
-        renderAll();
-      }
-    });
   });
 }
 
@@ -757,9 +891,10 @@ function getWeekDates(weekOffset = 0) {
   return days;
 }
 
-function getRealTimeThisWeekKey() {
-  const thisWeekMonday = getWeekDates(0)[0];
-  return formatDateYMD(thisWeekMonday);
+// 현재 화면에서 보고 있는 주(currentWeekOffset 반영)의 월요일 날짜 Key 반환
+function getViewedWeekKey() {
+  const viewedMonday = getWeekDates(currentWeekOffset)[0];
+  return formatDateYMD(viewedMonday);
 }
 
 function getCycleStatusForDate(targetDate) {
@@ -839,7 +974,7 @@ function getUpcomingCycles(count = 6) {
 }
 
 // ==========================================
-// 고정 스케줄 & 이번 주 스케줄 등록/필터링 로직
+// 고정 스케줄 & 선택된 주 스케줄 등록/필터링 로직
 // ==========================================
 function timeToMinutes(timeStr) {
   const [h, m] = timeStr.split(":").map(Number);
@@ -873,7 +1008,8 @@ function handleAddSchedule(mode = "fixed") {
     return;
   }
 
-  const weekKey = mode === "this_week" ? getRealTimeThisWeekKey() : null;
+  // 다른 주로 이동한 상태에서 '이번 주에만 등록' 클릭 시 현재 보고 있는 그 주에 등록
+  const weekKey = mode === "this_week" ? getViewedWeekKey() : null;
 
   const newEntry = {
     id: "sch_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
@@ -885,19 +1021,20 @@ function handleAddSchedule(mode = "fixed") {
     weekKey
   };
 
+  // 작업 전 스냅샷 저장 (되돌리기 지원)
+  saveUndoSnapshot();
+
   state.schedules.push(newEntry);
   locationInput.value = "";
 
-  if (mode === "this_week" && currentWeekOffset !== 0) {
-    currentWeekOffset = 0;
-  }
-
-  // 등록 이벤트 발생 시에도 등록창의 접기/펼침 상태를 닫지 않고 그대로 유지
   saveData();
   renderAll();
 }
 
 function deleteSchedule(id) {
+  // 삭제 전 스냅샷 저장 (되돌리기 지원)
+  saveUndoSnapshot();
+
   state.schedules = state.schedules.filter((item) => item.id !== id);
   saveData();
   renderAll();
@@ -1142,7 +1279,6 @@ function renderTimetable(weekDates) {
       ? deriveFreeSlotsForDay(day, viewedWeekKey)
       : [];
 
-    // 도출된 공강: 시간 정보 없이 '공강'만 표시
     const freeHtml = derivedFreeSlots
       .map((slot) => {
         const startOffsetMin = slot.startMin - START_HOUR * 60;
@@ -1158,7 +1294,6 @@ function renderTimetable(weekDates) {
       })
       .join("");
 
-    // 등록된 스케줄 블록: 글씨 없이 색상 블록만 표시
     const blocksHtml = daySchedules
       .map((item) => {
         const startOffsetMin = timeToMinutes(item.start) - START_HOUR * 60;
@@ -1183,7 +1318,7 @@ function renderTimetable(weekDates) {
 
   timetableBodyEl.innerHTML = timeColHtml + daysHtml;
 
-  // 블록 클릭 시 '스케줄 정보' 모달에 등록자·시간대·장소(내용)를 보기 좋게 표시
+  // 블록 클릭 시 '스케줄 정보' 모달 표시
   timetableBodyEl.querySelectorAll(".tt-block").forEach((block) => {
     block.addEventListener("click", () => {
       const targetId = block.dataset.id;
@@ -1192,7 +1327,9 @@ function renderTimetable(weekDates) {
 
       const userName = targetItem.user === "A" ? state.profiles.A : state.profiles.B;
       const userBadgeClass = targetItem.user === "A" ? "user-a" : "user-b";
-      const typeLabel = targetItem.weekKey ? "이번 주만 등록된 일정" : "매주 고정 일정";
+      const typeLabel = targetItem.weekKey
+        ? `${startLabel}~${endLabel} 주간에만 등록된 일정`
+        : "매주 고정 일정";
 
       const infoHtml = `
         <div class="schedule-info-card">

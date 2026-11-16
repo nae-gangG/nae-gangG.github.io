@@ -179,9 +179,57 @@ body {
   color: #FFFFFF;
 }
 
+/* 드로어 하단: 애칭 수정하기(4) : 패치 노트(1) 너비 비율 & 동일 높이(44px) */
 .drawer-footer {
   padding: 14px 14px 0;
   border-top: 1.5px solid var(--border-color);
+  display: grid;
+  grid-template-columns: 4fr 1.15fr;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.btn-outline-full {
+  width: 100%;
+  height: 44px;
+  background: var(--blush-pink-soft);
+  color: var(--burgundy);
+  border: 1.5px solid var(--burgundy);
+  border-radius: 12px;
+  padding: 0 12px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.btn-patchnotes {
+  width: 100%;
+  height: 44px;
+  background: #FFFFFF;
+  color: var(--burgundy);
+  border: 1.5px solid var(--blush-pink);
+  border-radius: 12px;
+  padding: 0 4px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.btn-patchnotes:hover,
+.btn-patchnotes:active {
+  background: var(--blush-pink-light);
+  border-color: var(--burgundy);
 }
 
 /* ==========================================
@@ -564,34 +612,39 @@ input:focus {
   white-space: nowrap;
 }
 
-.btn-outline-full {
-  width: 100%;
-  background: var(--blush-pink-soft);
-  color: var(--burgundy);
-  border: 1.5px solid var(--burgundy);
-  border-radius: 99px;
-  padding: 11px 14px;
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 800;
-  cursor: pointer;
-}
-
+/* 되돌리기(Undo) 버튼 */
 .sidebar-footer {
   margin-top: 12px;
   padding-top: 10px;
   border-top: 1px dashed var(--border-color);
-  text-align: right;
+  display: flex;
+  justify-content: flex-end;
 }
 
-.btn-text-danger {
-  background: none;
-  border: none;
-  color: var(--text-muted);
+.btn-undo {
+  background: var(--blush-pink-light);
+  border: 1px solid var(--blush-pink);
+  color: var(--burgundy);
+  font-family: inherit;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 800;
+  padding: 5px 12px;
+  border-radius: 999px;
   cursor: pointer;
-  text-decoration: underline;
+  transition: all 0.15s ease;
+}
+
+.btn-undo:hover:not(:disabled) {
+  background: var(--blush-pink);
+  border-color: var(--burgundy);
+}
+
+.btn-undo:disabled {
+  opacity: 0.42;
+  cursor: default;
+  color: var(--text-muted);
+  background: #FAF5F6;
+  border-color: var(--border-color);
 }
 
 .form-error {
@@ -1162,7 +1215,7 @@ input:focus {
 
 .tt-day-col:last-child { border-right: none; }
 
-/* 개인 스케줄 블록 (내부 텍스트 없이 색상으로만 깔끔하게 표시) */
+/* 개인 스케줄 블록 */
 .tt-block {
   position: absolute;
   top: 0;
@@ -1251,7 +1304,9 @@ input:focus {
   margin-bottom: 20px;
 }
 
-/* 모달 & 스케줄 정보 상세 카드 디자인 */
+/* ==========================================
+   모달 & 스케줄 정보 상세 카드 & 패치 노트 모달
+========================================== */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1357,6 +1412,118 @@ input:focus {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 4px;
+}
+
+/* 스케줄 정보 모달: 삭제하기(좌) - 취소(우) 버튼 간격 기존 8px -> 13px(+5px) */
+.confirm-modal-actions {
+  gap: 13px;
+}
+
+/* 패치 노트 모달 스타일 */
+.patchnotes-modal-box {
+  max-width: 420px;
+  max-height: 82dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.patchnotes-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.patchnotes-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #FFFFFF;
+  background: var(--burgundy);
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-bottom: 4px;
+}
+
+.patchnotes-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: -6px;
+}
+
+.patchnotes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.patch-card {
+  background: var(--bg-page);
+  border: 1.5px solid var(--border-color);
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.patch-card.latest {
+  border-color: var(--burgundy);
+  background: linear-gradient(135deg, #FFF5F7 0%, #FFFFFF 100%);
+}
+
+.patch-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.patch-version {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--burgundy);
+  background: var(--blush-pink);
+  padding: 2px 9px;
+  border-radius: 999px;
+}
+
+.patch-date {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.patch-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--burgundy);
+}
+
+.patch-items {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.patch-items li {
+  position: relative;
+  padding-left: 12px;
+  font-size: 12.5px;
+  color: var(--text-main);
+  line-height: 1.45;
+}
+
+.patch-items li::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: var(--burgundy);
+  font-weight: 800;
 }
 
 /* 갤럭시 & iOS 공용 PWA 홈화면 설치 유도 토스트 팝업 */

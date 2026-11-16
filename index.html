@@ -36,20 +36,24 @@
       <a href="index.html" class="drawer-link active">
         <span>주간 스케줄러</span>
       </a>
-      <a href="page/service1.html" class="drawer-link">
-        <span>서비스 1</span>
+      <a href="page/s1/service1.html" class="drawer-link">
+        <span>기다림의 노트</span>
       </a>
-      <a href="page/service2.html" class="drawer-link">
+      <a href="page/s2/service2.html" class="drawer-link">
         <span>서비스 2</span>
       </a>
-      <a href="page/service3.html" class="drawer-link">
+      <a href="page/s3/service3.html" class="drawer-link">
         <span>서비스 3</span>
       </a>
     </nav>
 
+    <!-- 하단: 애칭 수정하기 + 우측 1/4 비율 패치 노트 버튼 -->
     <div class="drawer-footer">
       <button type="button" id="btn-drawer-nickname" class="btn-outline-full">
         애칭 수정하기
+      </button>
+      <button type="button" id="btn-drawer-patchnotes" class="btn-patchnotes">
+        패치 노트
       </button>
     </div>
   </aside>
@@ -87,7 +91,7 @@
       <section id="schedule-form-card" class="card mobile-collapsible">
         <div class="card-header">
           <h2>개인 스케줄 등록</h2>
-          <p>매주 반복되는 고정 일정이나 이번 주만의 일정을 등록해 보세요.</p>
+          <p>매주 반복되는 고정 일정이나 선택한 주만의 일정을 등록해 보세요.</p>
         </div>
 
         <form id="schedule-form" class="schedule-form" novalidate>
@@ -152,8 +156,11 @@
           </div>
         </form>
 
+        <!-- 전체 초기화 대신 직전 작업을 복구하는 되돌리기(Undo) 버튼 -->
         <div class="sidebar-footer">
-          <button type="button" id="btn-clear-all" class="btn-text-danger">시간표 전체 초기화</button>
+          <button type="button" id="btn-undo" class="btn-undo" disabled>
+            ↩ 되돌리기
+          </button>
         </div>
       </section>
     </aside>
@@ -306,15 +313,30 @@
     </div>
   </div>
 
-  <!-- 스케줄 정보 열람 & 삭제 / 전체 초기화 확인 모달 -->
+  <!-- 스케줄 정보 열람 & 삭제 모달 (삭제하기가 왼쪽, 취소가 오른쪽, 간격 +5px) -->
   <div id="confirm-modal" class="modal-backdrop hidden">
     <div class="modal-box confirm-modal-box">
       <h3 id="confirm-modal-title">스케줄 정보</h3>
       <div id="confirm-modal-desc" class="confirm-modal-body"></div>
-      <div class="modal-actions">
-        <button type="button" id="btn-confirm-cancel" class="btn-outline">취소</button>
+      <div class="modal-actions confirm-modal-actions">
         <button type="button" id="btn-confirm-ok" class="btn-primary">삭제하기</button>
+        <button type="button" id="btn-confirm-cancel" class="btn-outline">취소</button>
       </div>
+    </div>
+  </div>
+
+  <!-- 패치 노트 모달 -->
+  <div id="patchnotes-modal" class="modal-backdrop hidden">
+    <div class="modal-box patchnotes-modal-box">
+      <div class="patchnotes-header">
+        <div>
+          <span class="patchnotes-badge">UPDATE LOG</span>
+          <h3>패치 노트</h3>
+        </div>
+        <button type="button" id="btn-close-patchnotes" class="btn-icon-close" aria-label="패치 노트 닫기">✕</button>
+      </div>
+      <p class="patchnotes-sub">개발자 남칭구가 수업 안 듣고 개발한 흔적들 입니다.</p>
+      <div id="patchnotes-list" class="patchnotes-list"></div>
     </div>
   </div>
 
