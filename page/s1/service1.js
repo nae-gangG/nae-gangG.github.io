@@ -18,32 +18,6 @@ const firebaseConfig = {
 const PRESENCE_TIMEOUT_MS = 35000;
 const HEARTBEAT_INTERVAL_MS = 12000;
 
-// 패치 노트 기록
-const PATCH_NOTES = [
-  {
-    version: "v1.3",
-    date: "2026. 11. 16.",
-    title: "신규 서비스 1: '기다림의 노트' 오픈",
-    latest: true,
-    items: [
-      "볼펜·형광펜·지우개 및 3단계 굵기·컬러 팔레트를 지원하는 드로잉 노트 구현",
-      "사용자 선택 시 'm분 s초 동안 기다리는 중..' 실시간 타이머 작동 및 완성 시 제목·소요 시간 기록",
-      "그림 완성 후 활성화되는 '그림 저장하기' 및 기기 자동 판별(iOS: 강쥐 / Android 외: 승이) 기반 누적 저장 횟수 DB 영구 카운팅"
-    ]
-  },
-  {
-    version: "v1.2",
-    date: "2026. 11. 16.",
-    title: "스케줄러 편의성 개선 & 되돌리기(Undo) 추가",
-    latest: false,
-    items: [
-      "일정 마감 시간 선택 범위를 23:00까지 확장",
-      "주간 이동 화살표로 넘어간 주에 '이번 주에만 등록'이 귀속되도록 개선",
-      "직전 스케줄 작업을 복구하는 '↩ 되돌리기(Undo)' 및 '패치 노트' 열람 창 신설"
-    ]
-  }
-];
-
 // 도구별 3단계 굵기 설정 (볼펜 / 형광펜 / 지우개)
 const TOOL_WIDTHS = {
   ballpoint: { thin: 1.8, medium: 3.4, thick: 6.0 },
@@ -63,40 +37,17 @@ function getOrCreateDeviceId() {
 
 const DEVICE_ID = getOrCreateDeviceId();
 
-/**
- * 기기 자동 판별:
- * - iOS 기기(아이폰/아이패드) 또는 A로 등록된 기기 -> 'A' (강쥐)
- * - 안드로이드(갤럭시) 등 그 외 모든 기기 -> 'B' (승이)
- */
-function detectUserByDevice() {
-  const ua = navigator.userAgent || "";
-  const isIOS =
-    /iPad|iPhone|iPod/.test(ua) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-
-  if (isIOS) {
-    localStorage.setItem("couple_registered_owner", "A");
-    return "A";
-  }
-
-  if (localStorage.getItem("couple_registered_owner") === "A") {
-    return "A";
-  }
-
-  return "B";
-}
-
 // 애플리케이션 상태
 let state = {
   profiles: {
     A: "강쥐",
     B: "승이"
   },
-  captureCounts: {
+  waitingCounts: {
     A: 0,
     B: 0
   },
-  sharedNote: null // { title, author: 'A'|'B', durationSec, imageDataUrl, createdAt }
+  sharedNote: null // { title, author: 'A'|'B', durationSec, imageDataUrl, memo, createdAt }
 };
 
 // 로컬 그리기 세션 상태
@@ -106,8 +57,8 @@ let drawingSession = {
   startTimeMs: 0,
   elapsedSec: 0,
   timerInterval: null,
-  tool: "ballpoint", // 'ballpoint' | 'highlighter' | 'eraser'
-  sizeKey: "medium", // 'thin' | 'medium' | 'thick'
+  tool: "ballpoint",
+  sizeKey: "medium",
   color: "#1E1B18",
   strokes: [],
   redoStack: [],
@@ -121,10 +72,11 @@ let noteDocRef = null;
 let presenceDocRef = null;
 let isCloudConnected = false;
 let hasLoadedNoteDoc = false;
+let isInitialStateResolved = false; // 초기 그림 유무가 확인되기 전까지 '너 누기야 !' 노출 방지
 let latestPresenceMap = {};
 let pendingConfirmAction = null;
 
-const LOCAL_NOTE_CACHE_KEY = "gangjwi_seungyi_waiting_note_v1";
+const LOCAL_NOTE_CACHE_KEY = "gangjwi_seungyi_waiting_note_v2";
 const LOCAL_SCHEDULE_CACHE_KEY = "gangjwi_seungyi_schedule_v5";
 
 // 공통 DOM
@@ -154,14 +106,14 @@ const btnConfirmOk = document.getElementById("btn-confirm-ok");
 const btnConfirmCancel = document.getElementById("btn-confirm-cancel");
 
 // 기다림의 노트 전용 DOM
-const captureCountAEl = document.getElementById("capture-count-a");
-const captureCountBEl = document.getElementById("capture-count-b");
+const waitCountAEl = document.getElementById("wait-count-a");
+const waitCountBEl = document.getElementById("wait-count-b");
 const viewSelectUser = document.getElementById("view-select-user");
 const viewWorkspace = document.getElementById("view-workspace");
 const btnStartUserA = document.getElementById("btn-start-user-a");
 const btnStartUserB = document.getElementById("btn-start-user-b");
 
-const drawingHeader = document.getElementById("drawing-header");
+const drawingStatusCard = document.getElementById("drawing-status-card");
 const drawingUserBadge = document.getElementById("drawing-user-badge");
 const waitingTimerText = document.getElementById("waiting-timer-text");
 const btnCancelDrawing = document.getElementById("btn-cancel-drawing");
@@ -185,9 +137,10 @@ const canvas = document.getElementById("drawing-canvas");
 const ctx = canvas.getContext("2d");
 const sharedNoteImage = document.getElementById("shared-note-image");
 
-const canvasSaveFooter = document.getElementById("canvas-save-footer");
-const btnSaveNote = document.getElementById("btn-save-note");
-const shutterFlash = document.getElementById("shutter-flash");
+const noteMemoDisplay = document.getElementById("note-memo-display");
+const noteMemoText = document.getElementById("note-memo-text");
+const canvasMemoFooter = document.getElementById("canvas-memo-footer");
+const btnOpenMemo = document.getElementById("btn-open-memo");
 
 const completeModal = document.getElementById("complete-modal");
 const completeTimeSummary = document.getElementById("complete-time-summary");
@@ -196,15 +149,64 @@ const noteTitleInput = document.getElementById("note-title-input");
 const titleError = document.getElementById("title-error");
 const btnCancelComplete = document.getElementById("btn-cancel-complete");
 
+// 100자 편지 메모 모달 DOM
+const memoModal = document.getElementById("memo-modal");
+const memoForm = document.getElementById("memo-form");
+const noteMemoInput = document.getElementById("note-memo-input");
+const memoCharCount = document.getElementById("memo-char-count");
+const memoError = document.getElementById("memo-error");
+const btnCancelMemo = document.getElementById("btn-cancel-memo");
+
 init();
 
 function init() {
-  renderPatchNotes();
+  loadGlobalPatchNotes();
   bindCommonEvents();
   bindNoteEvents();
   bindCanvasDrawingEvents();
   initDataSync();
   renderAll();
+}
+
+// ==========================================
+// 0. 전역 패치 노트 로더 (메인 ../../script.js의 PATCH_NOTES 단일 참조)
+// ==========================================
+async function loadGlobalPatchNotes() {
+  if (!patchnotesListEl) return;
+  try {
+    const res = await fetch("../../script.js", { cache: "no-cache" });
+    if (!res.ok) return;
+    const text = await res.text();
+    const match = text.match(/const\s+PATCH_NOTES\s*=\s*(\[[\s\S]*?\]);/);
+    if (match && match[1]) {
+      const notes = new Function(`return ${match[1]};`)();
+      if (Array.isArray(notes)) {
+        renderPatchNotes(notes);
+      }
+    }
+  } catch (err) {
+    console.error("전역 패치 노트 불러오기 실패:", err);
+  }
+}
+
+function renderPatchNotes(notes) {
+  if (!patchnotesListEl || !Array.isArray(notes)) return;
+  patchnotesListEl.innerHTML = notes
+    .map(
+      (note) => `
+      <div class="patch-card ${note.latest ? "latest" : ""}">
+        <div class="patch-card-top">
+          <span class="patch-version">${escapeHtml(note.version)}</span>
+          <span class="patch-date">${escapeHtml(note.date)}</span>
+        </div>
+        <div class="patch-title">${escapeHtml(note.title)}</div>
+        <ul class="patch-items">
+          ${(note.items || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+        </ul>
+      </div>
+    `
+    )
+    .join("");
 }
 
 // ==========================================
@@ -227,7 +229,7 @@ function formatDateTime(ts) {
 }
 
 // ==========================================
-// 2. Firebase 실시간 DB 연동 & 접속자 배너
+// 2. Firebase 실시간 DB 연동 & 초기 화면 깜빡임 방지
 // ==========================================
 function initDataSync() {
   const savedSchedule = localStorage.getItem(LOCAL_SCHEDULE_CACHE_KEY);
@@ -244,12 +246,26 @@ function initDataSync() {
   if (savedNote) {
     try {
       const parsed = JSON.parse(savedNote);
-      if (parsed.captureCounts) state.captureCounts = parsed.captureCounts;
-      if (parsed.sharedNote !== undefined) state.sharedNote = parsed.sharedNote;
+      if (parsed.waitingCounts) state.waitingCounts = parsed.waitingCounts;
+      if (parsed.sharedNote !== undefined) {
+        state.sharedNote = parsed.sharedNote;
+        // 캐시에 저장된 그림이 있으면 즉시 그림 화면으로 확정
+        if (state.sharedNote) {
+          isInitialStateResolved = true;
+        }
+      }
     } catch (e) {
       console.error(e);
     }
   }
+
+  // 네트워크가 느리거나 오프라인일 때 최대 300ms 후 초기 상태 확정
+  const fallbackTimer = setTimeout(() => {
+    if (!isInitialStateResolved) {
+      isInitialStateResolved = true;
+      renderAll();
+    }
+  }, 300);
 
   try {
     const app = initializeApp(firebaseConfig);
@@ -273,49 +289,60 @@ function initDataSync() {
     onSnapshot(
       noteDocRef,
       async (snapshot) => {
+        clearTimeout(fallbackTimer);
         isCloudConnected = true;
         hasLoadedNoteDoc = true;
+        isInitialStateResolved = true;
         updateSyncBadgeUI();
 
         if (snapshot.exists()) {
           const data = snapshot.data();
-          state.captureCounts = data.captureCounts || { A: 0, B: 0 };
+          state.waitingCounts = data.waitingCounts || { A: 0, B: 0 };
           state.sharedNote = data.sharedNote || null;
-
-          renderCaptureCounts();
-          if (!drawingSession.isDrawingMode) {
-            renderAll();
-          }
 
           localStorage.setItem(
             LOCAL_NOTE_CACHE_KEY,
             JSON.stringify({
-              captureCounts: state.captureCounts,
+              waitingCounts: state.waitingCounts,
               sharedNote: state.sharedNote
             })
           );
+
+          renderWaitingCounts();
+          if (!drawingSession.isDrawingMode) {
+            renderAll();
+          }
         } else {
           await saveNoteData();
+          if (!drawingSession.isDrawingMode) {
+            renderAll();
+          }
         }
       },
       (err) => {
+        clearTimeout(fallbackTimer);
         console.error("기다림의 노트 DB 읽기 오류:", err);
         isCloudConnected = false;
+        isInitialStateResolved = true;
         updateSyncBadgeUI();
+        renderAll();
       }
     );
 
     initPresenceTracking();
   } catch (err) {
+    clearTimeout(fallbackTimer);
     console.error("Firebase 연결 실패:", err);
     isCloudConnected = false;
+    isInitialStateResolved = true;
     updateSyncBadgeUI();
+    renderAll();
   }
 }
 
 async function saveNoteData() {
   const payload = {
-    captureCounts: state.captureCounts,
+    waitingCounts: state.waitingCounts,
     sharedNote: state.sharedNote,
     updatedAt: Date.now()
   };
@@ -417,7 +444,7 @@ function initPresenceTracking() {
 }
 
 // ==========================================
-// 3. 사용자 선택 & 기다림 타이머 & 노트 완성/새로 그리기
+// 3. 사용자 선택 & 기다림 타이머 & 노트 완성(+기다린 횟수 증가)
 // ==========================================
 function startWaitingAndDrawing(userKey) {
   drawingSession.isDrawingMode = true;
@@ -465,11 +492,9 @@ function openCompleteModal() {
   );
   stopWaitingTimer();
 
-  const userName =
-    drawingSession.activeUser === "A" ? state.profiles.A : state.profiles.B;
-  completeTimeSummary.textContent = `${userName}님이 ${formatMinSec(
+  completeTimeSummary.textContent = `총 ${formatMinSec(
     drawingSession.elapsedSec
-  )} 동안 그리며 기다렸어요.`;
+  )} 동안 기다렸어요.`;
   noteTitleInput.value = "";
   titleError.classList.add("hidden");
   completeModal.classList.remove("hidden");
@@ -495,12 +520,17 @@ async function handleCompleteSubmit(e) {
   exCtx.drawImage(canvas, 0, 0);
 
   const imageDataUrl = exportCanvas.toDataURL("image/webp", 0.85);
+  const authorKey = drawingSession.activeUser;
+
+  // 그림 완성 시 해당 사용자의 '기다린 횟수' +1 증가
+  state.waitingCounts[authorKey] = (Number(state.waitingCounts[authorKey]) || 0) + 1;
 
   state.sharedNote = {
     title,
-    author: drawingSession.activeUser,
+    author: authorKey,
     durationSec: drawingSession.elapsedSec,
     imageDataUrl,
+    memo: "",
     createdAt: Date.now()
   };
 
@@ -521,7 +551,42 @@ function resumeDrawingFromCompleteModal() {
 }
 
 // ==========================================
-// 4. 캔버스 드로잉 엔진 (볼펜 / 형광펜 / 지우개)
+// 4. 100자 편지 메모 추가하기 기능
+// ==========================================
+function openMemoModal() {
+  if (!state.sharedNote) return;
+  const currentMemo = state.sharedNote.memo || "";
+  noteMemoInput.value = currentMemo;
+  memoCharCount.textContent = `${currentMemo.length} / 100`;
+  memoError.classList.add("hidden");
+  memoModal.classList.remove("hidden");
+  setTimeout(() => noteMemoInput.focus(), 80);
+}
+
+function closeMemoModal() {
+  memoModal.classList.add("hidden");
+}
+
+async function handleMemoSubmit(e) {
+  e.preventDefault();
+  if (!state.sharedNote) return;
+
+  const memoText = noteMemoInput.value.trim();
+  if (!memoText) {
+    memoError.classList.remove("hidden");
+    noteMemoInput.focus();
+    return;
+  }
+
+  state.sharedNote.memo = memoText.slice(0, 100);
+  closeMemoModal();
+
+  await saveNoteData();
+  renderAll();
+}
+
+// ==========================================
+// 5. 캔버스 드로잉 엔진 (볼펜 / 형광펜 / 지우개)
 // ==========================================
 function resizeCanvas() {
   if (!canvasPaper || !canvas) return;
@@ -675,79 +740,6 @@ function updateHistoryButtonsUI() {
 }
 
 // ==========================================
-// 5. 기기 자동 추적 기반 그림 저장 카운팅 (완성 이후에만 활성화)
-// ==========================================
-async function triggerNoteSave(downloadImage = true) {
-  // 그림이 완성된 공유 상태일 때만 작동
-  if (!state.sharedNote || drawingSession.isDrawingMode) return;
-
-  // 1) 화면 플래시 효과
-  if (shutterFlash) {
-    shutterFlash.classList.remove("hidden");
-    setTimeout(() => {
-      shutterFlash.classList.add("hidden");
-    }, 360);
-  }
-
-  // 2) 접속 기기(iOS -> A, 그 외 안드로이드 등 -> B)를 자동 판별하여 저장 횟수 +1
-  const userKey = detectUserByDevice();
-  state.captureCounts[userKey] = (Number(state.captureCounts[userKey]) || 0) + 1;
-  renderCaptureCounts();
-  await saveNoteData();
-
-  // 3) 제목·그린 사람·기다린 시간이 포함된 이미지 저장
-  if (downloadImage) {
-    exportSavedImageWithStamp();
-  }
-}
-
-function exportSavedImageWithStamp() {
-  if (!state.sharedNote) return;
-
-  const outCanvas = document.createElement("canvas");
-  const w = 1080;
-  const h = 1280;
-  outCanvas.width = w;
-  outCanvas.height = h;
-  const oCtx = outCanvas.getContext("2d");
-
-  oCtx.fillStyle = "#FFF9FA";
-  oCtx.fillRect(0, 0, w, h);
-
-  oCtx.fillStyle = "#FFFFFF";
-  oCtx.strokeStyle = "#F4C2C2";
-  oCtx.lineWidth = 4;
-  oCtx.fillRect(40, 150, w - 80, h - 210);
-  oCtx.strokeRect(40, 150, w - 80, h - 210);
-
-  const authorKey = state.sharedNote.author;
-  const authorName = authorKey === "A" ? state.profiles.A : state.profiles.B;
-  const durationSec = state.sharedNote.durationSec || 0;
-  const titleText = state.sharedNote.title || "기다림의 노트";
-
-  oCtx.fillStyle = "#800020";
-  oCtx.font = "800 36px Pretendard, sans-serif";
-  oCtx.fillText(titleText, 44, 78);
-
-  oCtx.fillStyle = "#7D5A62";
-  oCtx.font = "700 24px Pretendard, sans-serif";
-  oCtx.fillText(
-    `${authorName} · ${formatMinSec(durationSec)} 동안 그리며 기다림`,
-    44,
-    118
-  );
-
-  if (sharedNoteImage.complete && sharedNoteImage.naturalWidth > 0) {
-    oCtx.drawImage(sharedNoteImage, 48, 158, w - 96, h - 226);
-  }
-
-  const link = document.createElement("a");
-  link.download = `기다림의노트_${titleText}.png`;
-  link.href = outCanvas.toDataURL("image/png");
-  link.click();
-}
-
-// ==========================================
 // 6. 이벤트 바인딩 & 전체 렌더링
 // ==========================================
 function bindNoteEvents() {
@@ -765,11 +757,20 @@ function bindNoteEvents() {
   completeForm.addEventListener("submit", handleCompleteSubmit);
   noteTitleInput.addEventListener("input", () => titleError.classList.add("hidden"));
 
+  // 메모 추가하기 모달 이벤트
+  btnOpenMemo.addEventListener("click", openMemoModal);
+  btnCancelMemo.addEventListener("click", closeMemoModal);
+  memoForm.addEventListener("submit", handleMemoSubmit);
+  noteMemoInput.addEventListener("input", () => {
+    memoError.classList.add("hidden");
+    memoCharCount.textContent = `${noteMemoInput.value.length} / 100`;
+  });
+
   // 새로 그리기 버튼
   btnDeleteNote.addEventListener("click", () => {
     openConfirmModal({
       title: "새로 그리기",
-      desc: "현재 공유된 그림과 기록을 지우고 새로 그릴까요? (누적 저장 횟수는 그대로 유지됩니다.)",
+      desc: "전시된 그림을 지우고 새로 그릴까요?",
       okText: "새로 그리기",
       onConfirm: async () => {
         state.sharedNote = null;
@@ -780,7 +781,7 @@ function bindNoteEvents() {
     });
   });
 
-  // 툴바: 도구 선택 (볼펜 / 형광펜 / 지우개)
+  // 툴바: 도구 선택
   document.querySelectorAll(".gn-tool-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       drawingSession.tool = btn.dataset.tool;
@@ -852,16 +853,6 @@ function bindNoteEvents() {
     updateHistoryButtonsUI();
     redrawCanvas();
   });
-
-  // 완성 후 활성화되는 '그림 저장하기' 버튼
-  btnSaveNote.addEventListener("click", () => triggerNoteSave(true));
-
-  // 완성 화면에서 키보드 PrintScreen 감지 시에도 자동 기기 판별 카운트
-  window.addEventListener("keyup", (e) => {
-    if (e.key === "PrintScreen") {
-      triggerNoteSave(false);
-    }
-  });
 }
 
 function bindCommonEvents() {
@@ -895,8 +886,9 @@ function bindCommonEvents() {
   }
 
   if (btnDrawerPatchnotes) {
-    btnDrawerPatchnotes.addEventListener("click", () => {
+    btnDrawerPatchnotes.addEventListener("click", async () => {
       closeDrawer();
+      await loadGlobalPatchNotes();
       patchnotesModal.classList.remove("hidden");
     });
   }
@@ -943,24 +935,6 @@ function closeConfirmModal() {
   pendingConfirmAction = null;
 }
 
-function renderPatchNotes() {
-  if (!patchnotesListEl) return;
-  patchnotesListEl.innerHTML = PATCH_NOTES.map(
-    (note) => `
-      <div class="patch-card ${note.latest ? "latest" : ""}">
-        <div class="patch-card-top">
-          <span class="patch-version">${note.version}</span>
-          <span class="patch-date">${note.date}</span>
-        </div>
-        <div class="patch-title">${note.title}</div>
-        <ul class="patch-items">
-          ${note.items.map((item) => `<li>${item}</li>`).join("")}
-        </ul>
-      </div>
-    `
-  ).join("");
-}
-
 function renderProfileNames() {
   document.querySelectorAll(".name-a").forEach((el) => {
     el.textContent = state.profiles.A;
@@ -970,44 +944,45 @@ function renderProfileNames() {
   });
 }
 
-function renderCaptureCounts() {
-  if (captureCountAEl) {
-    captureCountAEl.textContent = `${state.captureCounts.A || 0}회`;
+function renderWaitingCounts() {
+  if (waitCountAEl) {
+    waitCountAEl.textContent = `${state.waitingCounts.A || 0}회`;
   }
-  if (captureCountBEl) {
-    captureCountBEl.textContent = `${state.captureCounts.B || 0}회`;
+  if (waitCountBEl) {
+    waitCountBEl.textContent = `${state.waitingCounts.B || 0}회`;
   }
 }
 
 function renderAll() {
   renderProfileNames();
-  renderCaptureCounts();
+  renderWaitingCounts();
 
-  // 1) 현재 그리는 중인 경우 (저장 버튼 비활성/숨김)
+  // 1) 현재 그리는 중인 경우
   if (drawingSession.isDrawingMode) {
     viewSelectUser.classList.add("hidden");
     viewWorkspace.classList.remove("hidden");
-    drawingHeader.classList.remove("hidden");
-    completedHeader.classList.add("hidden");
+    drawingStatusCard.classList.remove("hidden");
     goodnotesToolbar.classList.remove("hidden");
+    completedHeader.classList.add("hidden");
     canvas.classList.remove("hidden");
     sharedNoteImage.classList.add("hidden");
-    canvasSaveFooter.classList.add("hidden");
+    noteMemoDisplay.classList.add("hidden");
+    canvasMemoFooter.classList.add("hidden");
     updateTimerUI();
     updateHistoryButtonsUI();
     return;
   }
 
-  // 2) 완성되어 공유 중인 그림이 있는 경우 ('그림 저장하기' 활성화)
+  // 2) 완성되어 공유 중인 그림이 있는 경우 (일체형 사각형 안에 제목+그림+편지메모+버튼 표시)
   if (state.sharedNote) {
     viewSelectUser.classList.add("hidden");
     viewWorkspace.classList.remove("hidden");
-    drawingHeader.classList.add("hidden");
-    completedHeader.classList.remove("hidden");
+    drawingStatusCard.classList.add("hidden");
     goodnotesToolbar.classList.add("hidden");
+    completedHeader.classList.remove("hidden");
     canvas.classList.add("hidden");
     sharedNoteImage.classList.remove("hidden");
-    canvasSaveFooter.classList.remove("hidden");
+    canvasMemoFooter.classList.remove("hidden");
 
     const note = state.sharedNote;
     const authorName = note.author === "A" ? state.profiles.A : state.profiles.B;
@@ -1021,10 +996,33 @@ function renderAll() {
     completedDateText.textContent = formatDateTime(note.createdAt);
     completedTitleText.textContent = note.title || "무제";
     sharedNoteImage.src = note.imageDataUrl || "";
+
+    if (note.memo && note.memo.trim() !== "") {
+      noteMemoText.textContent = note.memo;
+      noteMemoDisplay.classList.remove("hidden");
+    } else {
+      noteMemoText.textContent = "";
+      noteMemoDisplay.classList.add("hidden");
+    }
     return;
   }
 
-  // 3) 공유된 그림이 없고 대기 중인 초기 상태 -> 중앙 사용자 선택 화면 표시
+  // 3) 아직 DB 초기 확인 전이라면 '너 누기야 !' 화면을 미리 띄우지 않고 대기
+  if (!isInitialStateResolved) {
+    viewSelectUser.classList.add("hidden");
+    viewWorkspace.classList.add("hidden");
+    return;
+  }
+
+  // 4) 공유된 그림이 없음이 확인된 경우에만 '너 누기야 !' 화면 표시
   viewSelectUser.classList.remove("hidden");
   viewWorkspace.classList.add("hidden");
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }

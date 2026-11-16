@@ -13,9 +13,9 @@
   --text-muted: #7D5A62;
   --border-color: #F2D6D8;
 
-  --radius-lg: 18px;
+  --radius-lg: 22px;
   --radius-md: 12px;
-  --shadow-soft: 0 6px 20px rgba(128, 0, 32, 0.06);
+  --shadow-soft: 0 8px 24px rgba(128, 0, 32, 0.07);
 
   color-scheme: light only;
   forced-color-adjust: none;
@@ -311,7 +311,7 @@ body {
 }
 
 /* ==========================================
-   메인 콘텐츠 & 상단 누적 저장 횟수 바
+   메인 콘텐츠 & 상단 기다린 횟수 바
 ========================================== */
 .main-content {
   display: flex;
@@ -405,12 +405,6 @@ body {
   margin-bottom: 6px;
 }
 
-.stage-desc {
-  font-size: 13px;
-  color: var(--text-muted);
-  margin-bottom: 26px;
-}
-
 .user-choice-grid {
   width: 100%;
   display: grid;
@@ -477,7 +471,7 @@ body {
 }
 
 /* ==========================================
-   [상태 2 & 3] 워크스페이스 상단 타이머 & 메타 헤더
+   [상태 2] 그리는 중 상단 타이머 & 툴바
 ========================================== */
 .workspace-wrapper {
   display: flex;
@@ -536,52 +530,7 @@ body {
   gap: 8px;
 }
 
-/* 완성된 노트 헤더 */
-.completed-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.completed-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.completed-top-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.duration-pill {
-  font-size: 11.5px;
-  font-weight: 800;
-  color: var(--burgundy);
-  background: var(--blush-pink-soft);
-  padding: 2px 9px;
-  border-radius: 99px;
-}
-
-.completed-date {
-  font-size: 11.5px;
-  color: var(--text-muted);
-  font-weight: 600;
-}
-
-.completed-title {
-  font-size: 18px;
-  font-weight: 800;
-  color: var(--text-main);
-}
-
-/* ==========================================
-   그리기 상단 툴바 (볼펜 / 형광펜 / 지우개)
-========================================== */
+/* 그리기 상단 툴바 */
 .gn-toolbar {
   padding: 10px 12px;
   display: flex;
@@ -758,22 +707,71 @@ body {
 }
 
 /* ==========================================
-   흰 바탕의 그림 캔버스 영역 & 완성 후 저장 바
+   [상태 3] 일체형 완곡한 사각형 프레임 (제목 + 그림 + 편지 메모 + 하단 버튼)
 ========================================== */
 .canvas-stage-card {
   background: #FFFFFF;
-  border: 2px solid var(--blush-pink);
+  border: 2.5px solid var(--blush-pink);
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: var(--shadow-soft);
+  display: flex;
+  flex-direction: column;
+}
+
+/* 완성 시 그림 상단에 자연스럽게 하나로 이어지는 제목 헤더 */
+.completed-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 18px 20px 15px;
+  background: linear-gradient(180deg, #FFF7F8 0%, #FFFFFF 100%);
+  border-bottom: 1.5px dashed var(--blush-pink);
+}
+
+.completed-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.completed-top-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.duration-pill {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--burgundy);
+  background: var(--blush-pink-soft);
+  padding: 2px 9px;
+  border-radius: 99px;
+}
+
+.completed-date {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.completed-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--burgundy);
+  letter-spacing: -0.01em;
 }
 
 .canvas-paper {
   position: relative;
   width: 100%;
-  height: 62dvh;
-  min-height: 390px;
-  max-height: 640px;
+  height: 58dvh;
+  min-height: 360px;
+  max-height: 600px;
   background-color: #FFFFFF;
   touch-action: none;
   overflow: hidden;
@@ -795,14 +793,37 @@ body {
   background: #FFFFFF;
 }
 
-/* 완성 후에만 나타나는 하단 그림 저장 바 */
+/* 그림 하단에 붙는 100자 편지 메모 박스 */
+.note-memo-display {
+  padding: 0 16px 12px;
+  background: #FFFFFF;
+}
+
+.memo-paper-box {
+  background: #FFF9FA;
+  border: 1.5px solid var(--blush-pink);
+  border-radius: 14px;
+  padding: 13px 16px;
+  position: relative;
+}
+
+.note-memo-text {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-main);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 완성 후 하단 메모 추가하기 버튼 영역 */
 .canvas-capture-footer {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding: 11px 14px;
-  background: var(--bg-page);
-  border-top: 1.5px solid var(--border-color);
+  padding: 12px 16px 16px;
+  background: #FFFFFF;
+  border-top: 1px solid var(--blush-pink-light);
 }
 
 .btn-capture-action {
@@ -810,7 +831,7 @@ body {
   background: var(--burgundy);
   color: #FFFFFF;
   border: none;
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 12px 18px;
   font-family: inherit;
   font-size: 14px;
@@ -826,21 +847,6 @@ body {
 
 .btn-capture-action:active {
   transform: scale(0.99);
-}
-
-/* 저장 시 화면 플래시 애니메이션 */
-.shutter-flash {
-  position: fixed;
-  inset: 0;
-  background: #FFFFFF;
-  z-index: 300;
-  pointer-events: none;
-  animation: flash-out 0.35s ease-out forwards;
-}
-
-@keyframes flash-out {
-  0% { opacity: 0.9; }
-  100% { opacity: 0; }
 }
 
 /* ==========================================
@@ -933,7 +939,20 @@ body {
   color: var(--text-main);
 }
 
-input[type="text"] {
+.memo-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.memo-char-count {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--burgundy);
+}
+
+input[type="text"],
+textarea {
   width: 100%;
   padding: 10px 12px;
   border-radius: var(--radius-md);
@@ -943,9 +962,11 @@ input[type="text"] {
   font-size: 16px;
   color: var(--text-main);
   outline: none;
+  resize: none;
 }
 
-input[type="text"]:focus {
+input[type="text"]:focus,
+textarea:focus {
   border-color: var(--burgundy);
   box-shadow: 0 0 0 3px rgba(244, 194, 194, 0.45);
 }
