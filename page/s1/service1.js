@@ -47,7 +47,8 @@ let state = {
     A: 0,
     B: 0
   },
-  sharedNote: null // { title, author: 'A'|'B', durationSec, imageDataUrl, memo, createdAt }
+  activeDrawing: null, // { user: 'A'|'B', deviceId: string, startedAt: number }
+  sharedNote: null     // { title, author: 'A'|'B', durationSec, imageDataUrl, memo, createdAt }
 };
 
 // 로컬 그리기 세션 상태
@@ -66,13 +67,15 @@ let drawingSession = {
   isPointerDown: false
 };
 
+let partnerTimerInterval = null;
+
 let db = null;
 let scheduleDocRef = null;
 let noteDocRef = null;
 let presenceDocRef = null;
 let isCloudConnected = false;
 let hasLoadedNoteDoc = false;
-let isInitialStateResolved = false; // 초기 그림 유무가 확인되기 전까지 '너 누기야 !' 노출 방지
+let isInitialStateResolved = false;
 let latestPresenceMap = {};
 let pendingConfirmAction = null;
 
@@ -109,6 +112,11 @@ const btnConfirmCancel = document.getElementById("btn-confirm-cancel");
 const waitCountAEl = document.getElementById("wait-count-a");
 const waitCountBEl = document.getElementById("wait-count-b");
 const viewSelectUser = document.getElementById("view-select-user");
+const viewPartnerDrawing = document.getElementById("view-partner-drawing");
+const partnerDrawingTitle = document.getElementById("partner-drawing-title");
+const partnerDrawingTimer = document.getElementById("partner-drawing-timer");
+const btnForceUnlock = document.getElementById("btn-force-unlock");
+
 const viewWorkspace = document.getElementById("view-workspace");
 const btnStartUserA = document.getElementById("btn-start-user-a");
 const btnStartUserB = document.getElementById("btn-start-user-b");
@@ -210,7 +218,7 @@ function renderPatchNotes(notes) {
 }
 
 // ==========================================
-// 1. 시간 포맷 유틸리티 ("m분 s초")
+// 1. 시간 및 받침 조사("이가/가") 포맷 유틸리티
 // ==========================================
 function formatMinSec(totalSeconds) {
   const mins = Math.floor(totalSeconds / 60);
@@ -226,6 +234,15 @@ function formatDateTime(ts) {
   const hh = String(d.getHours()).padStart(2, "0");
   const min = String(d.getMinutes()).padStart(2, "0");
   return `${mm}/${dd} ${hh}:${min}`;
+}
+
+// 이름 마지막 글자에 받침이 있으면 '이가', 없으면 '가' 반환 (예: 강쥐가, 승이가, 동건이가)
+function getSubjectParticle(name) {
+  if (!name) return "가";
+  const lastCode = name.charCodeAt(name.length - 1);
+  if (lastCode < 0xac00 || lastCode > 0xd7a3) return "가";
+  const hasJongseong = (lastCode - 0xac00) % 28 !== 0;
+  return hasJongseong ? "이가" : "가";
 }
 
 // ==========================================
@@ -247,19 +264,17 @@ function initDataSync() {
     try {
       const parsed = JSON.parse(savedNote);
       if (parsed.waitingCounts) state.waitingCounts = parsed.waitingCounts;
-      if (parsed.sharedNote !== undefined) {
-        state.sharedNote = parsed.sharedNote;
-        // 캐시에 저장된 그림이 있으면 즉시 그림 화면으로 확정
-        if (state.sharedNote) {
-          isInitialStateResolved = true;
-        }
+      if (parsed.activeDrawing !== undefined) state.activeDrawing = parsed.activeDrawing;
+      if (parsed.sharedNote !== undefined) state.sharedNote = parsed.sharedNote;
+
+      if (state.sharedNote || state.activeDrawing) {
+        isInitialStateResolved = true;
       }
     } catch (e) {
       console.error(e);
     }
   }
 
-  // 네트워크가 느리거나 오프라인일 때 최대 300ms 후 초기 상태 확정
   const fallbackTimer = setTimeout(() => {
     if (!isInitialStateResolved) {
       isInitialStateResolved = true;
@@ -282,6 +297,7 @@ function initDataSync() {
         if (data.profiles) {
           state.profiles = data.profiles;
           renderProfileNames();
+          updatePartnerDrawingUI();
         }
       }
     });
@@ -298,12 +314,23 @@ function initDataSync() {
         if (snapshot.exists()) {
           const data = snapshot.data();
           state.waitingCounts = data.waitingCounts || { A: 0, B: 0 };
+          state.activeDrawing = data.activeDrawing || null;
           state.sharedNote = data.sharedNote || null;
+
+          // 만약 상대방이 강제로 대기 잠금을 해제했거나 그림이 완성되었다면 내 그리기 모드 정리
+          if (
+            drawingSession.isDrawingMode &&
+            (!state.activeDrawing || state.activeDrawing.deviceId !== DEVICE_ID)
+          ) {
+            stopWaitingTimer();
+            drawingSession.isDrawingMode = false;
+          }
 
           localStorage.setItem(
             LOCAL_NOTE_CACHE_KEY,
             JSON.stringify({
               waitingCounts: state.waitingCounts,
+              activeDrawing: state.activeDrawing,
               sharedNote: state.sharedNote
             })
           );
@@ -343,6 +370,7 @@ function initDataSync() {
 async function saveNoteData() {
   const payload = {
     waitingCounts: state.waitingCounts,
+    activeDrawing: state.activeDrawing,
     sharedNote: state.sharedNote,
     updatedAt: Date.now()
   };
@@ -444,15 +472,23 @@ function initPresenceTracking() {
 }
 
 // ==========================================
-// 3. 사용자 선택 & 기다림 타이머 & 노트 완성(+기다린 횟수 증가)
+// 3. 사용자 선택 & 실시간 그리기 상태 공유 & 타이머
 // ==========================================
-function startWaitingAndDrawing(userKey) {
+async function startWaitingAndDrawing(userKey) {
+  const now = Date.now();
   drawingSession.isDrawingMode = true;
   drawingSession.activeUser = userKey;
-  drawingSession.startTimeMs = Date.now();
+  drawingSession.startTimeMs = now;
   drawingSession.elapsedSec = 0;
   drawingSession.strokes = [];
   drawingSession.redoStack = [];
+
+  // 상대방에게 "(이름)가 그림 그리는 중 ..." 창이 즉시 뜨도록 DB에 상태 기록
+  state.activeDrawing = {
+    user: userKey,
+    deviceId: DEVICE_ID,
+    startedAt: now
+  };
 
   renderAll();
   resizeCanvas();
@@ -466,12 +502,21 @@ function startWaitingAndDrawing(userKey) {
     drawingSession.elapsedSec = Math.floor((Date.now() - drawingSession.startTimeMs) / 1000);
     updateTimerUI();
   }, 1000);
+
+  await saveNoteData();
 }
 
 function stopWaitingTimer() {
   if (drawingSession.timerInterval) {
     clearInterval(drawingSession.timerInterval);
     drawingSession.timerInterval = null;
+  }
+}
+
+function stopPartnerTimer() {
+  if (partnerTimerInterval) {
+    clearInterval(partnerTimerInterval);
+    partnerTimerInterval = null;
   }
 }
 
@@ -483,6 +528,20 @@ function updateTimerUI() {
     drawingSession.activeUser === "A" ? "user-a" : "user-b"
   }`;
   waitingTimerText.textContent = `${formatMinSec(drawingSession.elapsedSec)} 동안 기다리는 중..`;
+}
+
+function updatePartnerDrawingUI() {
+  if (!state.activeDrawing || !partnerDrawingTitle || !partnerDrawingTimer) return;
+  const drawerName =
+    state.activeDrawing.user === "A" ? state.profiles.A : state.profiles.B;
+  const particle = getSubjectParticle(drawerName);
+  partnerDrawingTitle.textContent = `${drawerName}${particle} 그림 그리는 중 ...`;
+
+  const elapsed = Math.max(
+    0,
+    Math.floor((Date.now() - (state.activeDrawing.startedAt || Date.now())) / 1000)
+  );
+  partnerDrawingTimer.textContent = `${formatMinSec(elapsed)}째 열중하는 중`;
 }
 
 function openCompleteModal() {
@@ -510,7 +569,6 @@ async function handleCompleteSubmit(e) {
     return;
   }
 
-  // 흰 배경이 포함된 경량 이미지 DataURL 생성
   const exportCanvas = document.createElement("canvas");
   exportCanvas.width = canvas.width;
   exportCanvas.height = canvas.height;
@@ -522,8 +580,9 @@ async function handleCompleteSubmit(e) {
   const imageDataUrl = exportCanvas.toDataURL("image/webp", 0.85);
   const authorKey = drawingSession.activeUser;
 
-  // 그림 완성 시 해당 사용자의 '기다린 횟수' +1 증가
+  // 그림 완성 시 해당 사용자의 '기다린 횟수' +1 증가 & 그리는 중 상태 해제
   state.waitingCounts[authorKey] = (Number(state.waitingCounts[authorKey]) || 0) + 1;
+  state.activeDrawing = null;
 
   state.sharedNote = {
     title,
@@ -746,11 +805,23 @@ function bindNoteEvents() {
   btnStartUserA.addEventListener("click", () => startWaitingAndDrawing("A"));
   btnStartUserB.addEventListener("click", () => startWaitingAndDrawing("B"));
 
-  btnCancelDrawing.addEventListener("click", () => {
+  // 그리기 취소 시 DB의 activeDrawing 잠금도 즉시 해제
+  btnCancelDrawing.addEventListener("click", async () => {
     stopWaitingTimer();
     drawingSession.isDrawingMode = false;
+    state.activeDrawing = null;
+    await saveNoteData();
     renderAll();
   });
+
+  // 상대방이 실수로 창을 닫았을 때 대기 잠금 해제 버튼
+  if (btnForceUnlock) {
+    btnForceUnlock.addEventListener("click", async () => {
+      state.activeDrawing = null;
+      await saveNoteData();
+      renderAll();
+    });
+  }
 
   btnFinishDrawing.addEventListener("click", openCompleteModal);
   btnCancelComplete.addEventListener("click", resumeDrawingFromCompleteModal);
@@ -774,6 +845,7 @@ function bindNoteEvents() {
       okText: "새로 그리기",
       onConfirm: async () => {
         state.sharedNote = null;
+        state.activeDrawing = null;
         drawingSession.isDrawingMode = false;
         await saveNoteData();
         renderAll();
@@ -881,6 +953,7 @@ function bindCommonEvents() {
       };
       nicknameModal.classList.add("hidden");
       renderProfileNames();
+      updatePartnerDrawingUI();
       await saveProfileNicknames();
     });
   }
@@ -956,10 +1029,12 @@ function renderWaitingCounts() {
 function renderAll() {
   renderProfileNames();
   renderWaitingCounts();
+  stopPartnerTimer();
 
-  // 1) 현재 그리는 중인 경우
+  // 1) 현재 내 기기에서 내가 그리고 있는 중인 경우
   if (drawingSession.isDrawingMode) {
     viewSelectUser.classList.add("hidden");
+    viewPartnerDrawing.classList.add("hidden");
     viewWorkspace.classList.remove("hidden");
     drawingStatusCard.classList.remove("hidden");
     goodnotesToolbar.classList.remove("hidden");
@@ -973,9 +1048,10 @@ function renderAll() {
     return;
   }
 
-  // 2) 완성되어 공유 중인 그림이 있는 경우 (일체형 사각형 안에 제목+그림+편지메모+버튼 표시)
+  // 2) 완성되어 공유 중인 그림이 있는 경우
   if (state.sharedNote) {
     viewSelectUser.classList.add("hidden");
+    viewPartnerDrawing.classList.add("hidden");
     viewWorkspace.classList.remove("hidden");
     drawingStatusCard.classList.add("hidden");
     goodnotesToolbar.classList.add("hidden");
@@ -1007,16 +1083,29 @@ function renderAll() {
     return;
   }
 
-  // 3) 아직 DB 초기 확인 전이라면 '너 누기야 !' 화면을 미리 띄우지 않고 대기
+  // 3) 상대방이 현재 그림을 그리는 중인 경우 -> "(상대)가 그림 그리는 중 ..." 대기 화면 표시
+  if (state.activeDrawing && state.activeDrawing.deviceId !== DEVICE_ID) {
+    viewSelectUser.classList.add("hidden");
+    viewWorkspace.classList.add("hidden");
+    viewPartnerDrawing.classList.remove("hidden");
+
+    updatePartnerDrawingUI();
+    partnerTimerInterval = setInterval(updatePartnerDrawingUI, 1000);
+    return;
+  }
+
+  // 4) 아직 DB 초기 확인 전이라면 '너 누기야 !' 화면을 미리 띄우지 않고 대기
   if (!isInitialStateResolved) {
     viewSelectUser.classList.add("hidden");
+    viewPartnerDrawing.classList.add("hidden");
     viewWorkspace.classList.add("hidden");
     return;
   }
 
-  // 4) 공유된 그림이 없음이 확인된 경우에만 '너 누기야 !' 화면 표시
-  viewSelectUser.classList.remove("hidden");
+  // 5) 아무도 그리는 중이 아니고 완성된 그림도 없을 때만 '너 누기야 !' 표시
+  viewPartnerDrawing.classList.add("hidden");
   viewWorkspace.classList.add("hidden");
+  viewSelectUser.classList.remove("hidden");
 }
 
 function escapeHtml(str) {
