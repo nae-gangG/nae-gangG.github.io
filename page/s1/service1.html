@@ -98,7 +98,7 @@
       </div>
     </section>
 
-    <!-- [상태 1] 비어 있을 때: 중앙 사용자 선택 화면 (초기 깜빡임 방지를 위해 기본 hidden) -->
+    <!-- [상태 1] 비어 있을 때: 중앙 사용자 선택 화면 (DB 확인 전까지 기본 hidden 유지) -->
     <section id="view-select-user" class="card select-user-stage hidden">
       <div class="stage-inner">
         <h2 class="stage-title">너 누기야 !</h2>
@@ -364,31 +364,75 @@
     </div>
   </div>
 
-  <!-- 페이지 진입 즉시 캐시된 그림 또는 상대방 그리기 상태를 확인해 '너 누기야 !' 깜빡임 차단 -->
+  <!-- 페이지 진입 즉시(0ms) 캐시된 그림 또는 상대방 그리기 대기창을 띄워 '너 누기야 !' 깜빡임 원천 차단 -->
   <script>
     (function () {
       try {
-        var raw = localStorage.getItem("gangjwi_seungyi_waiting_note_v2");
-        if (!raw) return;
-        var parsed = JSON.parse(raw);
+        var profiles = { A: "강쥐", B: "승이" };
+        var rawSch = localStorage.getItem("gangjwi_seungyi_schedule_v5");
+        if (rawSch) {
+          var schParsed = JSON.parse(rawSch);
+          if (schParsed && schParsed.profiles) profiles = schParsed.profiles;
+        }
+
+        var rawNote = localStorage.getItem("gangjwi_seungyi_waiting_note_v2");
+        if (!rawNote) return;
+        var parsed = JSON.parse(rawNote);
         if (!parsed) return;
 
+        if (parsed.waitingCounts) {
+          var wcA = document.getElementById("wait-count-a");
+          var wcB = document.getElementById("wait-count-b");
+          if (wcA) wcA.textContent = (parsed.waitingCounts.A || 0) + "회";
+          if (wcB) wcB.textContent = (parsed.waitingCounts.B || 0) + "회";
+        }
+
         if (parsed.sharedNote) {
+          var note = parsed.sharedNote;
           var ws = document.getElementById("view-workspace");
           var ch = document.getElementById("completed-header");
           var img = document.getElementById("shared-note-image");
           var ft = document.getElementById("canvas-memo-footer");
+          var titleText = document.getElementById("completed-title-text");
+          var authorBadge = document.getElementById("completed-author-badge");
+          var durBadge = document.getElementById("completed-duration-badge");
+          var memoBox = document.getElementById("note-memo-display");
+          var memoText = document.getElementById("note-memo-text");
+
           if (ws) ws.classList.remove("hidden");
           if (ch) ch.classList.remove("hidden");
+          if (titleText) titleText.textContent = note.title || "무제";
+          if (authorBadge) {
+            authorBadge.textContent = note.author === "A" ? profiles.A : profiles.B;
+            authorBadge.className = "author-badge " + (note.author === "A" ? "user-a" : "user-b");
+          }
+          if (durBadge) {
+            var dSec = note.durationSec || 0;
+            durBadge.textContent = Math.floor(dSec / 60) + "분 " + (dSec % 60) + "초 동안 그리며 기다림";
+          }
           if (img) {
-            img.src = parsed.sharedNote.imageDataUrl || "";
+            img.src = note.imageDataUrl || "";
             img.classList.remove("hidden");
+          }
+          if (note.memo && note.memo.trim() !== "" && memoBox && memoText) {
+            memoText.textContent = note.memo;
+            memoBox.classList.remove("hidden");
           }
           if (ft) ft.classList.remove("hidden");
         } else if (parsed.activeDrawing) {
           var myDevId = localStorage.getItem("couple_device_id_v1");
           if (parsed.activeDrawing.deviceId && parsed.activeDrawing.deviceId !== myDevId) {
             var pd = document.getElementById("view-partner-drawing");
+            var titleEl = document.getElementById("partner-drawing-title");
+            var timerEl = document.getElementById("partner-drawing-timer");
+            var name = parsed.activeDrawing.user === "A" ? profiles.A : profiles.B;
+            var code = name ? name.charCodeAt(name.length - 1) : 0;
+            var particle = (code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 !== 0) ? "이가" : "가";
+            if (titleEl) titleEl.textContent = name + particle + " 그림 그리는 중 ...";
+            if (timerEl) {
+              var sec = Math.max(0, Math.floor((Date.now() - (parsed.activeDrawing.startedAt || Date.now())) / 1000));
+              timerEl.textContent = Math.floor(sec / 60) + "분 " + (sec % 60) + "초째 열중하는 중";
+            }
             if (pd) pd.classList.remove("hidden");
           }
         }

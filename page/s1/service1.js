@@ -75,7 +75,7 @@ let noteDocRef = null;
 let presenceDocRef = null;
 let isCloudConnected = false;
 let hasLoadedNoteDoc = false;
-let isInitialStateResolved = false;
+let isInitialStateResolved = false; // DB에서 최신 상태가 도착하기 전에는 false 유지
 let latestPresenceMap = {};
 let pendingConfirmAction = null;
 
@@ -115,7 +115,6 @@ const viewSelectUser = document.getElementById("view-select-user");
 const viewPartnerDrawing = document.getElementById("view-partner-drawing");
 const partnerDrawingTitle = document.getElementById("partner-drawing-title");
 const partnerDrawingTimer = document.getElementById("partner-drawing-timer");
-const btnForceUnlock = document.getElementById("btn-force-unlock");
 
 const viewWorkspace = document.getElementById("view-workspace");
 const btnStartUserA = document.getElementById("btn-start-user-a");
@@ -236,7 +235,6 @@ function formatDateTime(ts) {
   return `${mm}/${dd} ${hh}:${min}`;
 }
 
-// 이름 마지막 글자에 받침이 있으면 '이가', 없으면 '가' 반환 (예: 강쥐가, 승이가, 동건이가)
 function getSubjectParticle(name) {
   if (!name) return "가";
   const lastCode = name.charCodeAt(name.length - 1);
@@ -246,7 +244,7 @@ function getSubjectParticle(name) {
 }
 
 // ==========================================
-// 2. Firebase 실시간 DB 연동 & 초기 화면 깜빡임 방지
+// 2. Firebase 실시간 DB 연동 & '너 누기야 !' 깜빡임 완벽 차단
 // ==========================================
 function initDataSync() {
   const savedSchedule = localStorage.getItem(LOCAL_SCHEDULE_CACHE_KEY);
@@ -266,21 +264,23 @@ function initDataSync() {
       if (parsed.waitingCounts) state.waitingCounts = parsed.waitingCounts;
       if (parsed.activeDrawing !== undefined) state.activeDrawing = parsed.activeDrawing;
       if (parsed.sharedNote !== undefined) state.sharedNote = parsed.sharedNote;
-
-      if (state.sharedNote || state.activeDrawing) {
-        isInitialStateResolved = true;
-      }
     } catch (e) {
       console.error(e);
     }
   }
 
+  // 오프라인 상태일 때만 즉시 로컬 상태로 화면 결정
+  if (navigator.onLine === false) {
+    isInitialStateResolved = true;
+  }
+
+  // 네트워크가 아예 먹통일 때만 대비한 안전 타임아웃 (2.5초)
   const fallbackTimer = setTimeout(() => {
     if (!isInitialStateResolved) {
       isInitialStateResolved = true;
       renderAll();
     }
-  }, 300);
+  }, 2500);
 
   try {
     const app = initializeApp(firebaseConfig);
@@ -308,6 +308,7 @@ function initDataSync() {
         clearTimeout(fallbackTimer);
         isCloudConnected = true;
         hasLoadedNoteDoc = true;
+        // DB에서 최신 상태(상대방이 그리는 중인지 여부 포함)를 확실히 받아온 시점에 true로 전환
         isInitialStateResolved = true;
         updateSyncBadgeUI();
 
@@ -317,7 +318,6 @@ function initDataSync() {
           state.activeDrawing = data.activeDrawing || null;
           state.sharedNote = data.sharedNote || null;
 
-          // 만약 상대방이 강제로 대기 잠금을 해제했거나 그림이 완성되었다면 내 그리기 모드 정리
           if (
             drawingSession.isDrawingMode &&
             (!state.activeDrawing || state.activeDrawing.deviceId !== DEVICE_ID)
@@ -468,6 +468,10 @@ function initPresenceTracking() {
 
   window.addEventListener("pagehide", () => {
     sendPresenceHeartbeat(false);
+    if (drawingSession.isDrawingMode) {
+      state.activeDrawing = null;
+      saveNoteData();
+    }
   });
 }
 
@@ -483,7 +487,6 @@ async function startWaitingAndDrawing(userKey) {
   drawingSession.strokes = [];
   drawingSession.redoStack = [];
 
-  // 상대방에게 "(이름)가 그림 그리는 중 ..." 창이 즉시 뜨도록 DB에 상태 기록
   state.activeDrawing = {
     user: userKey,
     deviceId: DEVICE_ID,
@@ -580,7 +583,6 @@ async function handleCompleteSubmit(e) {
   const imageDataUrl = exportCanvas.toDataURL("image/webp", 0.85);
   const authorKey = drawingSession.activeUser;
 
-  // 그림 완성 시 해당 사용자의 '기다린 횟수' +1 증가 & 그리는 중 상태 해제
   state.waitingCounts[authorKey] = (Number(state.waitingCounts[authorKey]) || 0) + 1;
   state.activeDrawing = null;
 
@@ -805,7 +807,6 @@ function bindNoteEvents() {
   btnStartUserA.addEventListener("click", () => startWaitingAndDrawing("A"));
   btnStartUserB.addEventListener("click", () => startWaitingAndDrawing("B"));
 
-  // 그리기 취소 시 DB의 activeDrawing 잠금도 즉시 해제
   btnCancelDrawing.addEventListener("click", async () => {
     stopWaitingTimer();
     drawingSession.isDrawingMode = false;
@@ -813,15 +814,6 @@ function bindNoteEvents() {
     await saveNoteData();
     renderAll();
   });
-
-  // 상대방이 실수로 창을 닫았을 때 대기 잠금 해제 버튼
-  if (btnForceUnlock) {
-    btnForceUnlock.addEventListener("click", async () => {
-      state.activeDrawing = null;
-      await saveNoteData();
-      renderAll();
-    });
-  }
 
   btnFinishDrawing.addEventListener("click", openCompleteModal);
   btnCancelComplete.addEventListener("click", resumeDrawingFromCompleteModal);
@@ -1094,7 +1086,7 @@ function renderAll() {
     return;
   }
 
-  // 4) 아직 DB 초기 확인 전이라면 '너 누기야 !' 화면을 미리 띄우지 않고 대기
+  // 4) 아직 DB 초기 응답이 오기 전이라면 '너 누기야 !' 화면을 절대 띄우지 않고 대기
   if (!isInitialStateResolved) {
     viewSelectUser.classList.add("hidden");
     viewPartnerDrawing.classList.add("hidden");
@@ -1102,7 +1094,7 @@ function renderAll() {
     return;
   }
 
-  // 5) 아무도 그리는 중이 아니고 완성된 그림도 없을 때만 '너 누기야 !' 표시
+  // 5) DB 확인 결과 아무도 그리는 중이 아니고 완성된 그림도 없을 때만 '너 누기야 !' 표시
   viewPartnerDrawing.classList.add("hidden");
   viewWorkspace.classList.add("hidden");
   viewSelectUser.classList.remove("hidden");
